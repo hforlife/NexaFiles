@@ -34,7 +34,8 @@ class TrashItem {
 class TrashService {
   TrashService(this.storage);
   final StorageRepository storage;
-  static const key = 'nexa.trash.v1';
+  // v2: entries are file:// paths (v1 held SAF URIs, no longer reachable).
+  static const key = 'nexa.trash.v2';
   Future<List<TrashItem>> list() async {
     final p = await SharedPreferences.getInstance();
     return (p.getStringList(key) ?? const [])
@@ -47,7 +48,6 @@ class TrashService {
           key, items.map((e) => jsonEncode(e.toJson())).toList());
   Future<bool> moveToTrash(
       StorageEntry entry, Uri originalParent, Uri root) async {
-    if (entry.kind != StorageEntryKind.file) return false;
     try {
       final children = await storage.list(root);
       var trash = children

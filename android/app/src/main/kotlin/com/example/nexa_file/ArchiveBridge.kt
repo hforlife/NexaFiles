@@ -29,6 +29,7 @@ class ArchiveBridge(private val context: Context, messenger: BinaryMessenger) {
         catch(e:Exception){main.post{result.error("ARCHIVE",e.message ?: "Archive illisible",e.javaClass.name)}}
     } } }
     @Synchronized private fun materialize(uri: Uri): File {
+        if (uri.scheme == "file") return File(requireNotNull(uri.path)).also { require(it.isFile && it.length() > 0L) { "Fichier introuvable ou vide" } }
         val dir = File(context.cacheDir, "archive_sources").apply { mkdirs() }
         val file = File(dir, "${uri.toString().hashCode().toUInt()}.source")
         if (!file.exists() || file.length() == 0L) {

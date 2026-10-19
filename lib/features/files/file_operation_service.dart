@@ -59,10 +59,7 @@ class FileOperationService {
               completed: completed,
               total: sources.length,
               currentName: source.displayName));
-          await _copyEntry(source, destination, conflict, token);
-          if (move) {
-            await storage.delete(source.uri);
-          }
+          await _transferEntry(source, destination, conflict, move: move);
           completed++;
         }
         controller.add(FileOperationProgress(
@@ -79,9 +76,10 @@ class FileOperationService {
     return controller.stream;
   }
 
-  Future<void> _copyEntry(StorageEntry source, Uri destination,
-      ConflictPolicy policy, CancellationToken token) async {
-    token.throwIfCancelled();
+  /// Copies or moves one entry (file or whole folder) into [destination].
+  Future<void> _transferEntry(
+      StorageEntry source, Uri destination, ConflictPolicy policy,
+      {required bool move}) async {
     if (source.uri == destination ||
         _looksDescendant(source.uri, destination)) {
       throw const StorageFailure(
@@ -89,51 +87,37 @@ class FileOperationService {
     }
     final children = await storage.list(destination),
         names = children.map((e) => e.displayName.toLowerCase()).toSet();
+    final existing = children
+        .where((e) =>
+            e.displayName.toLowerCase() == source.displayName.toLowerCase())
+        .firstOrNull;
     var name = source.displayName;
     StorageEntry? replaceTarget;
-    final existing = children
-        .where((e) => e.displayName.toLowerCase() == name.toLowerCase())
-        .firstOrNull;
-    if (existing != null) {
+    if (existing != null && existing.uri == source.uri) {
+      // Same folder: moving is a no-op, copying makes a renamed duplicate.
+      if (move) return;
+      name = keepBothName(name, names);
+    } else if (existing != null) {
       switch (policy) {
         case ConflictPolicy.cancel:
           throw const OperationCancelled();
         case ConflictPolicy.skip:
           return;
         case ConflictPolicy.replace:
+          // Land under a temporary name first so the old entry is only
+          // removed once the new one is complete.
           replaceTarget = existing;
           name = keepBothName('.nexa-copy-${source.displayName}', names);
-          break;
         case ConflictPolicy.keepBoth:
           name = keepBothName(name, names);
-          break;
       }
     }
-    StorageEntry created;
-    if (source.kind == StorageEntryKind.file) {
-      created = await storage.copy(source.uri, destination,
-          targetName: name == source.displayName ? null : name);
-    } else {
-      created = await storage.createDirectory(destination, name);
-      try {
-        for (final child in await storage.list(source.uri)) {
-          token.throwIfCancelled();
-          await _copyEntry(child, created.uri, policy, token);
-        }
-      } catch (_) {
-        try {
-          await storage.delete(created.uri);
-        } catch (_) {}
-        rethrow;
-      }
-    }
+    final created = move
+        ? await storage.move(source.uri, destination, targetName: name)
+        : await storage.copy(source.uri, destination, targetName: name);
     if (replaceTarget != null) {
-      try {
-        await storage.delete(replaceTarget.uri);
-        await storage.rename(created.uri, source.displayName);
-      } catch (_) {
-        rethrow;
-      }
+      await storage.delete(replaceTarget.uri);
+      await storage.rename(created.uri, source.displayName);
     }
   }
 

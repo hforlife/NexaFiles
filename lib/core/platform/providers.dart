@@ -1,5 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../storage/saf_storage_repository.dart';
+import '../storage/local_storage_repository.dart';
 import '../storage/storage_repository.dart';
 import '../readers/reader_core.dart';
 import '../archives/archive_core.dart';
@@ -11,7 +11,7 @@ import '../readers/document_adapters.dart';
 import '../readers/media_adapters.dart';
 
 final storageRepositoryProvider =
-    Provider<StorageRepository>((_) => SafStorageRepository());
+    Provider<StorageRepository>((_) => LocalStorageRepository());
 final archiveRegistryProvider =
     Provider<ArchiveRegistry>((_) => ArchiveRegistry([
           ZipArchiveAdapter(),

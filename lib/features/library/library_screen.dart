@@ -12,6 +12,8 @@ import '../../core/platform/providers.dart';
 import '../../core/readers/document_adapters.dart';
 import '../reader/comic_reader_screen.dart';
 import '../reader/document_reader_screens.dart';
+import '../files/destination_picker.dart';
+import '../files/files_controller.dart';
 
 final libraryItemsProvider = FutureProvider.autoDispose<List<LibraryRecord>>(
     (ref) => LibraryRepository(ref.read(databaseProvider)).query());
@@ -631,9 +633,17 @@ class _RootsSheet extends ConsumerWidget {
                         style: Theme.of(context).textTheme.titleLarge)),
                 IconButton(
                     onPressed: () async {
-                      final entry = await ref
-                          .read(storageRepositoryProvider)
-                          .pickDirectory();
+                      final storage = ref.read(storageRepositoryProvider);
+                      final uri = await Navigator.push<Uri>(
+                          context,
+                          MaterialPageRoute(
+                              builder: (_) => DestinationPicker(
+                                  storage: storage,
+                                  roots:
+                                      ref.read(filesControllerProvider).roots,
+                                  title: 'Dossier de bibliothèque')));
+                      if (uri == null) return;
+                      final entry = await storage.get(uri);
                       if (entry == null) return;
                       await ref
                           .read(databaseProvider)

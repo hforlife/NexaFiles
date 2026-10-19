@@ -12,22 +12,37 @@ import '../../core/performance/perf_trace.dart';
 
 enum FileViewMode { list, grid }
 
+/// A storage volume shown on the Files home screen.
 class RootLocation {
   const RootLocation(
-      {required this.uri,
+      {required this.entry,
       required this.name,
-      required this.available,
-      this.entry,
-      this.favorite = false,
+      this.primary = false,
+      this.removable = false,
       this.totalBytes,
-      this.freeBytes,
-      this.discovered = false});
-  final Uri uri;
+      this.freeBytes});
+  final StorageEntry entry;
   final String name;
-  final bool available, favorite, discovered;
-  final StorageEntry? entry;
+  final bool primary, removable;
   final int? totalBytes, freeBytes;
+  Uri get uri => entry.uri;
 }
+
+/// Well-known folder of the primary volume (Download, DCIM…).
+class QuickFolder {
+  const QuickFolder(this.folderName, this.label, this.entry);
+  final String folderName, label;
+  final StorageEntry entry;
+}
+
+const standardFolders = [
+  ('Download', 'Téléchargements'),
+  ('Documents', 'Documents'),
+  ('DCIM', 'Appareil photo'),
+  ('Pictures', 'Images'),
+  ('Music', 'Musique'),
+  ('Movies', 'Vidéos'),
+];
 
 class NavigationNode {
   const NavigationNode(this.entry);
@@ -38,7 +53,10 @@ class FileManagerState {
   const FileManagerState(
       {this.loading = false,
       this.showHidden = false,
+      this.hasAccess,
       this.roots = const [],
+      this.quickFolders = const [],
+      this.favorites = const [],
       this.path = const [],
       this.entries = const [],
       this.selected = const {},
@@ -48,7 +66,12 @@ class FileManagerState {
       this.direction = SortDirection.ascending,
       this.failure});
   final bool loading, showHidden;
+
+  /// Null until checked; false shows the permission screen.
+  final bool? hasAccess;
   final List<RootLocation> roots;
+  final List<QuickFolder> quickFolders;
+  final List<StorageEntry> favorites;
   final List<NavigationNode> path;
   final List<StorageEntry> entries;
   final Set<Uri> selected;
@@ -59,6 +82,7 @@ class FileManagerState {
   final AppFailure? failure;
   bool get browsing => path.isNotEmpty;
   bool get selecting => selected.isNotEmpty;
+  bool isFavorite(Uri uri) => favorites.any((e) => e.uri == uri);
   StorageEntry? get current => path.isEmpty ? null : path.last.entry;
   List<StorageEntry> get visibleEntries {
     var filtered = showHidden
@@ -74,7 +98,10 @@ class FileManagerState {
   FileManagerState copyWith(
           {bool? loading,
           bool? showHidden,
+          bool? hasAccess,
           List<RootLocation>? roots,
+          List<QuickFolder>? quickFolders,
+          List<StorageEntry>? favorites,
           List<NavigationNode>? path,
           List<StorageEntry>? entries,
           Set<Uri>? selected,
@@ -87,7 +114,10 @@ class FileManagerState {
       FileManagerState(
           loading: loading ?? this.loading,
           showHidden: showHidden ?? this.showHidden,
+          hasAccess: hasAccess ?? this.hasAccess,
           roots: roots ?? this.roots,
+          quickFolders: quickFolders ?? this.quickFolders,
+          favorites: favorites ?? this.favorites,
           path: path ?? this.path,
           entries: entries ?? this.entries,
           selected: selected ?? this.selected,
@@ -111,12 +141,14 @@ class FilesController extends StateNotifier<FileManagerState> {
       : super(const FileManagerState());
   final StorageRepository storage;
   final AppDatabase database;
+
   static const _viewKey = 'files.view_mode',
       _sortKey = 'files.sort',
       _directionKey = 'files.sort_direction',
       _hiddenKey = 'files.show_hidden';
   Future<void> initialize() async {
     final prefs = await SharedPreferences.getInstance();
+    if (!mounted) return;
     state = state.copyWith(
         showHidden: prefs.getBool(_hiddenKey) ?? false,
         viewMode: FileViewMode.values
@@ -128,75 +160,117 @@ class FilesController extends StateNotifier<FileManagerState> {
     await loadRoots();
   }
 
+  /// Volumes, standard folders and favorites; also re-checks the permission.
   Future<void> loadRoots() async {
     state = state.copyWith(loading: true, clearFailure: true);
     try {
-      var records = await database.roots();
-      final favorites = await database.favoriteUris(),
-          persisted = await storage.grantedRoots();
-      final known = records.map((e) => e.uri).toSet();
-      for (final entry in persisted) {
-        if (!known.contains('${entry.uri}')) {
-          await database.upsertRoot('${entry.uri}', entry.displayName);
+      final access = await storage.hasAllFilesAccess();
+      if (!mounted) return;
+      if (!access) {
+        state = state.copyWith(
+            loading: false,
+            hasAccess: false,
+            roots: [],
+            quickFolders: [],
+            favorites: []);
+        return;
+      }
+      final volumes = await storage.volumes();
+      final roots = [
+        for (final v in volumes)
+          RootLocation(
+              entry: StorageEntry(
+                  uri: Uri.file(v.path),
+                  displayName: v.name,
+                  kind: StorageEntryKind.directory),
+              name: v.name,
+              primary: v.primary,
+              removable: v.removable,
+              totalBytes: v.totalBytes,
+              freeBytes: v.freeBytes)
+      ];
+      final primary = volumes.where((v) => v.primary).firstOrNull;
+      final quick = <QuickFolder>[];
+      if (primary != null) {
+        for (final (folder, label) in standardFolders) {
+          final entry = await storage.get(Uri.file('${primary.path}/$folder'));
+          if (entry?.kind == StorageEntryKind.directory) {
+            quick.add(QuickFolder(folder, label, entry!));
+          }
         }
       }
-      records = await database.roots();
-      final byUri = {for (final entry in persisted) '${entry.uri}': entry};
-      final roots = [
-        for (final record in records)
-          RootLocation(
-              uri: Uri.parse(record.uri),
-              name: record.name,
-              available: byUri.containsKey(record.uri),
-              entry: byUri[record.uri],
-              favorite: favorites.contains(record.uri))
-      ];
-      state = state.copyWith(loading: false, roots: roots);
+      final favorites = <StorageEntry>[];
+      for (final record in await database.favoriteFolders()) {
+        final entry = await storage.get(Uri.parse(record.uri));
+        if (entry?.kind == StorageEntryKind.directory) favorites.add(entry!);
+      }
+      if (!mounted) return;
+      state = state.copyWith(
+          loading: false,
+          hasAccess: true,
+          roots: roots,
+          quickFolders: quick,
+          favorites: favorites);
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(loading: false, failure: mapFailure(e));
     }
   }
 
-  Future<void> addLocation() async {
+  /// Opens the system permission screen; [loadRoots] runs again on resume.
+  Future<void> requestAccess() async {
     try {
-      final entry = await storage.pickDirectory();
-      if (entry == null) return;
-      await database.upsertRoot('${entry.uri}', entry.displayName);
-      await loadRoots();
+      await storage.requestAllFilesAccess();
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(failure: mapFailure(e));
     }
   }
 
-  Future<void> removeRoot(RootLocation root) async {
-    await database.removeRoot('${root.uri}');
-    try {
-      await storage.releaseRoot(root.uri);
-    } catch (_) {}
-    if (state.path.isNotEmpty && state.path.first.entry.uri == root.uri) {
-      state = state.copyWith(path: [], entries: [], selected: {});
-    }
-    await loadRoots();
-  }
-
-  Future<void> toggleFavorite(RootLocation root) async {
-    await database.setFavorite('${root.uri}', root.name, !root.favorite);
-    await loadRoots();
+  Future<void> toggleFavorite(StorageEntry folder) async {
+    await database.setFavorite(
+        '${folder.uri}', folder.displayName, !state.isFavorite(folder.uri));
+    if (!mounted) return;
+    final favorites = state.isFavorite(folder.uri)
+        ? state.favorites.where((e) => e.uri != folder.uri).toList()
+        : ([...state.favorites, folder]..sort((a, b) => a.displayName
+            .toLowerCase()
+            .compareTo(b.displayName.toLowerCase())));
+    state = state.copyWith(favorites: favorites);
   }
 
   Future<void> openRoot(RootLocation root) async {
-    if (root.discovered && !root.available) {
-      await addLocation();
-      return;
-    }
-    if (!root.available || root.entry == null) {
-      state = state.copyWith(
-          failure: const PermissionFailure(
-              'Emplacement inaccessible. Autorisez-le à nouveau ou retirez-le.'));
-      return;
-    }
     state = state
-        .copyWith(path: [NavigationNode(root.entry!)], selected: {}, query: '');
+        .copyWith(path: [NavigationNode(root.entry)], selected: {}, query: '');
+    await refresh();
+  }
+
+  /// Opens any folder with a full breadcrumb from its volume root.
+  Future<void> openDirectory(StorageEntry folder) async {
+    final target = folder.uri.toFilePath();
+    final root = state.roots
+        .where((r) =>
+            target == r.uri.toFilePath() ||
+            target.startsWith('${r.uri.toFilePath()}/'))
+        .firstOrNull;
+    final nodes = <NavigationNode>[];
+    if (root != null) {
+      nodes.add(NavigationNode(root.entry));
+      var path = root.uri.toFilePath();
+      for (final segment in target
+          .substring(path.length)
+          .split('/')
+          .where((e) => e.isNotEmpty)) {
+        path = '$path/$segment';
+        nodes.add(NavigationNode(StorageEntry(
+            uri: Uri.file(path),
+            displayName: segment,
+            kind: StorageEntryKind.directory)));
+      }
+    } else {
+      nodes.add(NavigationNode(folder));
+    }
+    state = state.copyWith(path: nodes, selected: {}, query: '');
     await refresh();
   }
 
@@ -226,6 +300,14 @@ class FilesController extends StateNotifier<FileManagerState> {
     return false;
   }
 
+  /// Jumps straight to breadcrumb level [index] with a single listing.
+  Future<void> goTo(int index) async {
+    if (index < 0 || index >= state.path.length - 1) return;
+    state = state.copyWith(
+        path: state.path.sublist(0, index + 1), selected: {}, query: '');
+    await refresh();
+  }
+
   Future<void> refresh() async {
     final current = state.current;
     if (current == null) {
@@ -236,6 +318,7 @@ class FilesController extends StateNotifier<FileManagerState> {
     try {
       final entries = await PerfTrace.measure(
           'directory.listChildren', () => storage.list(current.uri));
+      if (!mounted) return;
       state = state.copyWith(loading: false, entries: entries, selected: {});
       assert(() {
         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -244,6 +327,7 @@ class FilesController extends StateNotifier<FileManagerState> {
         return true;
       }());
     } catch (e) {
+      if (!mounted) return;
       state = state.copyWith(loading: false, failure: mapFailure(e));
     }
   }
@@ -256,14 +340,23 @@ class FilesController extends StateNotifier<FileManagerState> {
     state = state.copyWith(selected: values);
   }
 
-  void selectAll() =>
-      state = state.copyWith(selected: state.entries.map((e) => e.uri).toSet());
+  /// Selects only what the user can see (hidden files and search filter apply).
+  void selectAll() => state =
+      state.copyWith(selected: state.visibleEntries.map((e) => e.uri).toSet());
   void clearSelection() => state = state.copyWith(selected: {});
-  List<StorageEntry> get selectedEntries =>
-      state.entries.where((e) => state.selected.contains(e.uri)).toList();
-  void search(String value) => state = state.copyWith(query: value);
+
+  /// Selected entries that are currently visible; never acts on hidden ones.
+  List<StorageEntry> get selectedEntries => state.visibleEntries
+      .where((e) => state.selected.contains(e.uri))
+      .toList();
+  void search(String value) => _pruneSelection(state.copyWith(query: value));
+  void _pruneSelection(FileManagerState next) {
+    final visible = next.visibleEntries.map((e) => e.uri).toSet();
+    state = next.copyWith(selected: next.selected.intersection(visible));
+  }
+
   Future<void> setShowHidden(bool value) async {
-    state = state.copyWith(showHidden: value);
+    _pruneSelection(state.copyWith(showHidden: value));
     await (await SharedPreferences.getInstance()).setBool(_hiddenKey, value);
   }
 

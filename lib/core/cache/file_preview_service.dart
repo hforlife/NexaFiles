@@ -15,7 +15,7 @@ class FilePreviewService {
       return hit;
     }
     final value = _channel
-        .invokeMethod<Uint8List>('thumbnail', {'uri': '${entry.uri}'})
+        .invokeMethod<Uint8List>('thumbnail', {'path': entry.uri.toFilePath()})
         .catchError((_) => null)
         .then((v) => v == null || v.isEmpty ? null : v);
     _memory[key] = value;

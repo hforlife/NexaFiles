@@ -115,11 +115,10 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
                           );
                         })),
               ]);
-    return WillPopScope(
-        onWillPop: () async {
-          if (prefix.isEmpty) return true;
-          _parent();
-          return false;
+    return PopScope(
+        canPop: prefix.isEmpty,
+        onPopInvoked: (didPop) {
+          if (!didPop) _parent();
         },
         child: Scaffold(
           appBar: AppBar(title: Text(widget.name), actions: [

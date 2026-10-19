@@ -53,7 +53,11 @@ class LibraryScanner {
       for (final entry in entries) {
         if (cancellation?.cancelled == true) break;
         if (entry.kind == StorageEntryKind.directory) {
-          pending.add(entry.uri);
+          // Hidden folders (trash, thumbnails) and app data are never books.
+          if (!entry.displayName.startsWith('.') &&
+              entry.displayName != 'Android') {
+            pending.add(entry.uri);
+          }
           continue;
         }
         final format = indexableKind(entry.displayName);

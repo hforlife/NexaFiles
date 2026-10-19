@@ -8,7 +8,7 @@ import '../../shared/formatters.dart';
 class AppDatabase extends GeneratedDatabase {
   AppDatabase([QueryExecutor? executor]) : super(executor ?? _open());
   @override
-  int get schemaVersion => 4;
+  int get schemaVersion => 5;
   @override
   Iterable<TableInfo<Table, Object?>> get allTables => const [];
   @override
@@ -23,8 +23,6 @@ class AppDatabase extends GeneratedDatabase {
             'CREATE TABLE bookmarks (id TEXT PRIMARY KEY, item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE, locator_json TEXT NOT NULL, label TEXT, created_at INTEGER NOT NULL)');
         await customStatement(
             'CREATE TABLE recent_items (item_id TEXT PRIMARY KEY REFERENCES library_items(id) ON DELETE CASCADE, opened_at INTEGER NOT NULL)');
-        await customStatement(
-            'CREATE TABLE library_roots (uri TEXT PRIMARY KEY, display_name TEXT NOT NULL, added_at INTEGER NOT NULL)');
         await customStatement(
             'CREATE TABLE favorite_folders (uri TEXT PRIMARY KEY, display_name TEXT NOT NULL, added_at INTEGER NOT NULL)');
         await customStatement(
@@ -66,32 +64,45 @@ class AppDatabase extends GeneratedDatabase {
           await customStatement(
               'CREATE TABLE collection_items (collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE, item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE, added_at INTEGER NOT NULL, PRIMARY KEY(collection_id,item_id))');
         }
+        if (from < 5) {
+          // v5 drops SAF (content://) identities for direct file paths. Those
+          // rows can no longer be opened; foreign keys are not enforced yet
+          // during migration, so children are cleared explicitly.
+          for (final table in [
+            'reading_progress',
+            'bookmarks',
+            'recent_items',
+            'collection_items',
+            'reader_preferences'
+          ]) {
+            await customStatement(
+                "DELETE FROM $table WHERE item_id LIKE 'content:%'");
+          }
+          await customStatement(
+              "DELETE FROM library_items WHERE source_uri LIKE 'content:%'");
+          await customStatement(
+              "DELETE FROM favorite_folders WHERE uri LIKE 'content:%'");
+          await customStatement(
+              "DELETE FROM library_scan_roots WHERE uri LIKE 'content:%'");
+          await customStatement('DROP TABLE IF EXISTS library_roots');
+        }
       }, beforeOpen: (details) async {
         await customStatement('PRAGMA foreign_keys = ON');
       });
 
-  Future<void> upsertRoot(String uri, String name) => customStatement(
-      'INSERT INTO library_roots(uri,display_name,added_at) VALUES(?,?,?) ON CONFLICT(uri) DO UPDATE SET display_name=excluded.display_name',
-      [uri, name, DateTime.now().millisecondsSinceEpoch]);
-  Future<void> removeRoot(String uri) =>
-      customStatement('DELETE FROM library_roots WHERE uri=?', [uri]);
-  Future<List<RootRecord>> roots() async => (await customSelect(
-              'SELECT uri,display_name,added_at FROM library_roots ORDER BY added_at DESC')
+  Future<void> setFavorite(String uri, String name, bool favorite) => favorite
+      ? customStatement(
+          'INSERT OR REPLACE INTO favorite_folders(uri,display_name,added_at) VALUES(?,?,?)',
+          [uri, name, DateTime.now().millisecondsSinceEpoch])
+      : customStatement('DELETE FROM favorite_folders WHERE uri=?', [uri]);
+  Future<List<RootRecord>> favoriteFolders() async => (await customSelect(
+              'SELECT uri,display_name,added_at FROM favorite_folders ORDER BY display_name COLLATE NOCASE')
           .get())
       .map((r) => RootRecord(
           r.read<String>('uri'),
           r.read<String>('display_name'),
           DateTime.fromMillisecondsSinceEpoch(r.read<int>('added_at'))))
       .toList();
-  Future<void> setFavorite(String uri, String name, bool favorite) => favorite
-      ? customStatement(
-          'INSERT OR REPLACE INTO favorite_folders(uri,display_name,added_at) VALUES(?,?,?)',
-          [uri, name, DateTime.now().millisecondsSinceEpoch])
-      : customStatement('DELETE FROM favorite_folders WHERE uri=?', [uri]);
-  Future<Set<String>> favoriteUris() async =>
-      (await customSelect('SELECT uri FROM favorite_folders').get())
-          .map((r) => r.read<String>('uri'))
-          .toSet();
   Future<void> recordRecent(
       {required String id,
       required String uri,

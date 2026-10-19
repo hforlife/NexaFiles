@@ -1,9 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import '../../app/router/app_router.dart';
+import '../../app/router/app_tabs.dart';
 import '../../core/database/database_provider.dart';
-import '../../core/platform/providers.dart';
 import '../settings/storage_data_screen.dart';
+import '../../shared/formatters.dart';
+import '../files/files_controller.dart';
 import 'trash_screen.dart';
 
 class ToolsScreen extends ConsumerWidget {
@@ -33,8 +34,8 @@ class ToolsScreen extends ConsumerWidget {
                   title: 'Archives',
                   subtitle: 'Parcourir et extraire',
                   color: Colors.deepPurple,
-                  onTap: () =>
-                      Navigator.pushReplacementNamed(context, AppRoutes.files)),
+                  onTap: () => ref.read(currentTabProvider.notifier).state =
+                      AppTab.files),
               _Tool(
                   icon: Icons.cleaning_services_outlined,
                   title: 'Stockage et données',
@@ -52,8 +53,8 @@ class ToolsScreen extends ConsumerWidget {
                   onTap: () => _roots(context, ref)),
               _Tool(
                   icon: Icons.storage_rounded,
-                  title: 'Emplacements',
-                  subtitle: 'Accès SAF autorisés',
+                  title: 'Stockage',
+                  subtitle: 'Volumes et espace libre',
                   color: Colors.blue,
                   onTap: () => _storage(context, ref))
             ]),
@@ -84,22 +85,26 @@ class ToolsScreen extends ConsumerWidget {
             ])));
   }
 
-  Future<void> _storage(BuildContext context, WidgetRef ref) async {
-    final roots = await ref.read(storageRepositoryProvider).grantedRoots();
-    if (!context.mounted) return;
+  void _storage(BuildContext context, WidgetRef ref) {
+    final roots = ref.read(filesControllerProvider).roots;
     showModalBottomSheet(
         context: context,
         builder: (_) => SafeArea(
                 child: ListView(shrinkWrap: true, children: [
-              const ListTile(title: Text('Emplacements autorisés')),
+              const ListTile(title: Text('Volumes de stockage')),
               for (final root in roots)
                 ListTile(
-                    leading: const Icon(Icons.storage_rounded),
-                    title: Text(root.displayName),
-                    subtitle: Text('${root.uri}',
-                        maxLines: 1, overflow: TextOverflow.ellipsis)),
+                    leading: Icon(root.removable
+                        ? Icons.sd_card_outlined
+                        : Icons.phone_android),
+                    title: Text(root.name),
+                    subtitle: Text(
+                        '${formatBytes(root.freeBytes)} libres sur ${formatBytes(root.totalBytes)}\n${root.uri.toFilePath()}')),
               if (roots.isEmpty)
-                const ListTile(title: Text('Aucun emplacement autorisé'))
+                const ListTile(
+                    title: Text('Aucun volume accessible'),
+                    subtitle: Text(
+                        'Autorisez l’accès aux fichiers depuis l’onglet Fichiers.'))
             ])));
   }
 }

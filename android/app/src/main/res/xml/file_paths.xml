@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Files shared with other apps (share / open with) through FileProvider. -->
+<paths>
+    <external-path name="external" path="." />
+    <!-- Removable volumes (SD cards) live outside the primary external storage. -->
+    <root-path name="volumes" path="/storage" />
+</paths>
