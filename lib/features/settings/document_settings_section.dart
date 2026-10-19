@@ -19,12 +19,13 @@ class _DocumentSettingsSectionState extends State<DocumentSettingsSection> {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted)
+    if (mounted) {
       setState(() {
         epubSize = p.getDouble('epub.fontSize') ?? 18;
         textSize = p.getDouble('text.fontSize') ?? 17;
         epubTheme = p.getString('epub.theme') ?? 'light';
       });
+    }
   }
 
   Future<void> _set(String key, Object value) async {

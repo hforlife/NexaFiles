@@ -23,9 +23,10 @@ class _DestinationPickerState extends State<DestinationPicker> {
     });
     try {
       final values = await widget.storage.list(entry.uri);
-      if (mounted)
+      if (mounted) {
         setState(() => directories =
             values.where((e) => e.kind == StorageEntryKind.directory).toList());
+      }
     } finally {
       if (mounted) setState(() => loading = false);
     }

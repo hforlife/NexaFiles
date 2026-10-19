@@ -298,9 +298,10 @@ class _EpubReaderScreenState extends State<EpubReaderScreen> {
     if (p != null) {
       try {
         final l = ReadingLocator.decode(p.locator);
-        if (l is EpubLocator)
+        if (l is EpubLocator) {
           chapter =
               (l.chapter ?? 0).clamp(0, widget.session.chapters.length - 1);
+        }
       } catch (_) {}
     }
     if (mounted) setState(() {});
@@ -422,11 +423,12 @@ class _EpubReaderScreenState extends State<EpubReaderScreen> {
                         final i = widget.session.chapters.indexWhere(
                             (e) => e.text.toLowerCase().contains(q));
                         Navigator.pop(c);
-                        if (i >= 0)
+                        if (i >= 0) {
                           _go(i);
-                        else
+                        } else {
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Aucun résultat')));
+                        }
                       },
                       child: const Text('Rechercher'))
                 ]));
@@ -497,7 +499,8 @@ class _EpubReaderScreenState extends State<EpubReaderScreen> {
                 ]))));
     if (mounted) setState(() => styleRevision++);
     assert(() {
-      print('NexaFiles EPUB settings: ${stopwatch.elapsedMilliseconds} ms');
+      debugPrint(
+          'NexaFiles EPUB settings: ${stopwatch.elapsedMilliseconds} ms');
       return true;
     }());
     final p = await SharedPreferences.getInstance();
@@ -533,8 +536,9 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
     scroll.addListener(_progress);
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final p = await widget.database.progress(widget.itemId);
-      if (p != null && scroll.hasClients)
+      if (p != null && scroll.hasClients) {
         scroll.jumpTo(p.fraction * scroll.position.maxScrollExtent);
+      }
     });
   }
 
@@ -600,12 +604,13 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
                             .toLowerCase()
                             .indexOf(input.text.toLowerCase());
                         Navigator.pop(c);
-                        if (i < 0)
+                        if (i < 0) {
                           ScaffoldMessenger.of(context).showSnackBar(
                               const SnackBar(content: Text('Aucun résultat')));
-                        else
+                        } else {
                           scroll.jumpTo((i / widget.session.text.length) *
                               scroll.position.maxScrollExtent);
+                        }
                       },
                       child: const Text('Rechercher'))
                 ]));
@@ -693,12 +698,14 @@ class _ImageReaderScreenState extends State<ImageReaderScreen> {
                         ? Future.value(widget.session.bytes)
                         : _load(i),
                     builder: (_, snap) {
-                      if (snap.hasError)
+                      if (snap.hasError) {
                         return const Center(
                             child: Text('Image impossible à ouvrir',
                                 style: TextStyle(color: Colors.white)));
-                      if (!snap.hasData)
+                      }
+                      if (!snap.hasData) {
                         return const Center(child: CircularProgressIndicator());
+                      }
                       return _ZoomImage(bytes: snap.data!);
                     }))));
   }

@@ -35,23 +35,25 @@ class RecentsScreen extends ConsumerWidget {
               onPressed: () => ref.invalidate(recentsProvider),
               child: const Text('Réessayer'))),
       data: (items) {
-        if (items.isEmpty)
+        if (items.isEmpty) {
           return const EmptyState(
               icon: Icons.history,
               title: 'Aucun fichier ouvert récemment',
               message:
                   'Les fichiers ouverts depuis NexaFiles apparaîtront ici.');
+        }
         return RefreshIndicator(
             onRefresh: () async => ref.invalidate(recentsProvider),
             child: ListView.builder(
                 padding: const EdgeInsets.only(bottom: 88),
                 itemCount: items.length + 1,
                 itemBuilder: (_, i) {
-                  if (i == 0)
+                  if (i == 0) {
                     return Padding(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
                         child: Text('Fichiers ouverts récemment',
                             style: Theme.of(context).textTheme.titleLarge));
+                  }
                   final item = items[i - 1];
                   final cover =
                       item.coverKey == null ? null : File(item.coverKey!);
@@ -98,12 +100,13 @@ class RecentsScreen extends ConsumerWidget {
           fileName: entry.displayName);
       if ((format.content == ContentKind.unknown ||
               format.content == ContentKind.archive) &&
-          ContentKind.values.any((e) => e.name == item.format))
+          ContentKind.values.any((e) => e.name == item.format)) {
         format = DetectedFormat(
             container: _container(entry.displayName),
             content: ContentKind.values.byName(item.format),
             confidence: .8,
             evidence: const ['recent:canonical']);
+      }
       final session = await ref
               .read(readerRegistryProvider)
               .open(storage.sourceFor(entry), format),
@@ -135,14 +138,16 @@ class RecentsScreen extends ConsumerWidget {
           mime: item.mime,
           size: item.size);
       ref.invalidate(recentsProvider);
-      if (context.mounted)
+      if (context.mounted) {
         await Navigator.push(
             context, MaterialPageRoute(builder: (_) => screen));
+      }
     } catch (_) {
-      if (context.mounted)
+      if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
             content: Text(
                 'Ce fichier n’est plus disponible ou son format a changé.')));
+      }
     }
   }
 }
@@ -182,8 +187,9 @@ String _relative(DateTime value) {
       difference = now.difference(date);
   if (difference.inMinutes < 1) return 'À l’instant';
   if (difference.inMinutes < 60) return 'Il y a ${difference.inMinutes} min';
-  if (date.year == now.year && date.month == now.month && date.day == now.day)
+  if (date.year == now.year && date.month == now.month && date.day == now.day) {
     return 'Aujourd’hui, ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+  }
   final yesterday = now.subtract(const Duration(days: 1));
   if (date.year == yesterday.year &&
       date.month == yesterday.month &&

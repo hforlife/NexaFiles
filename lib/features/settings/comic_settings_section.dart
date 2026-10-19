@@ -20,7 +20,7 @@ class _ComicSettingsSectionState extends State<ComicSettingsSection> {
 
   Future<void> _load() async {
     final p = await SharedPreferences.getInstance();
-    if (mounted)
+    if (mounted) {
       setState(() {
         mode = ComicReadingMode.values
             .byName(p.getString('comic.default.mode') ?? mode.name);
@@ -29,6 +29,7 @@ class _ComicSettingsSectionState extends State<ComicSettingsSection> {
         fit = ComicFitMode.values
             .byName(p.getString('comic.default.fit') ?? fit.name);
       });
+    }
   }
 
   Future<void> _choose() async {

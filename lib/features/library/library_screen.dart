@@ -454,9 +454,10 @@ class _LibraryScreenState extends ConsumerState<LibraryScreen> {
       await Navigator.push(context, MaterialPageRoute(builder: (_) => screen));
       ref.invalidate(libraryItemsProvider);
     } catch (_) {
-      if (mounted)
+      if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text('Fichier introuvable ou illisible.')));
+      }
     }
   }
 
@@ -543,12 +544,13 @@ class _Cover extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final file = item.coverKey == null ? null : File(item.coverKey!);
-    if (file != null && file.existsSync())
+    if (file != null && file.existsSync()) {
       return Image.file(file,
           height: height,
           width: double.infinity,
           fit: BoxFit.cover,
           cacheWidth: 400);
+    }
     final icon = switch (item.format) {
       'epub' => Icons.menu_book,
       'pdf' => Icons.picture_as_pdf,
@@ -582,7 +584,9 @@ class _ScanDialogState extends State<_ScanDialog> {
     sub = widget.scanner.scan(widget.root, cancellation: cancel).listen((v) {
       if (v.done) {
         Navigator.pop(context);
-      } else if (mounted) setState(() => value = v);
+      } else if (mounted) {
+        setState(() => value = v);
+      }
     });
   }
 
@@ -710,11 +714,13 @@ class _CollectionsSheet extends ConsumerWidget {
                                       final name = await _name(
                                           context, 'Renommer', item.name);
                                       if (name != null &&
-                                          name.trim().isNotEmpty)
+                                          name.trim().isNotEmpty) {
                                         await repo.rename(item.id, name);
+                                      }
                                     }
-                                    if (v == 'delete')
+                                    if (v == 'delete') {
                                       await repo.delete(item.id);
+                                    }
                                     ref.invalidate(collectionsProvider);
                                   },
                                   itemBuilder: (_) => const [

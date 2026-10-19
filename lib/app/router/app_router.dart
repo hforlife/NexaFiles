@@ -13,13 +13,15 @@ abstract final class AppRoutes {
 
 abstract final class AppRouter {
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
-    if (settings.name == AppRoutes.settings)
+    if (settings.name == AppRoutes.settings) {
       return MaterialPageRoute(
           settings: settings, builder: (_) => const SettingsScreen());
+    }
     final index = AppRoutes.tabs.indexOf(settings.name ?? '');
-    if (index >= 0)
+    if (index >= 0) {
       return MaterialPageRoute(
           settings: settings, builder: (_) => MainShell(initialIndex: index));
+    }
     return MaterialPageRoute(
         settings: settings, builder: (_) => const MainShell());
   }

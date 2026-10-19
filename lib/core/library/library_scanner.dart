@@ -119,8 +119,10 @@ class LibraryScanner {
 
   void _scheduleCover(StorageEntry entry, ContentKind kind) {
     if (readers == null ||
-        !{ContentKind.pdf, ContentKind.epub, ContentKind.comic}.contains(kind))
+        !{ContentKind.pdf, ContentKind.epub, ContentKind.comic}
+            .contains(kind)) {
       return;
+    }
     _coverTail =
         _coverTail.then((_) => _generateCover(entry, kind)).catchError((_) {});
   }
@@ -137,8 +139,9 @@ class LibraryScanner {
         session = await readers!.open(storage.sourceFor(entry),
             DetectedFormat(container: container, content: kind, confidence: 1));
     List<int>? bytes;
-    if (session is PdfReaderSession)
+    if (session is PdfReaderSession) {
       bytes = await session.render(0, width: 300);
+    }
     if (session is EpubReaderSession) bytes = session.coverBytes;
     if (session is ComicReaderSession) {
       final page = await session.pages.getPage(0),

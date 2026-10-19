@@ -82,9 +82,11 @@ class FileOperationService {
   Future<void> _copyEntry(StorageEntry source, Uri destination,
       ConflictPolicy policy, CancellationToken token) async {
     token.throwIfCancelled();
-    if (source.uri == destination || _looksDescendant(source.uri, destination))
+    if (source.uri == destination ||
+        _looksDescendant(source.uri, destination)) {
       throw const StorageFailure(
           'La destination ne peut pas être située dans la source.');
+    }
     final children = await storage.list(destination),
         names = children.map((e) => e.displayName.toLowerCase()).toSet();
     var name = source.displayName;

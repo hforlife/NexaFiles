@@ -98,8 +98,9 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
                                 ? null
                                 : PopupMenuButton<String>(
                                     onSelected: (v) {
-                                      if (v == 'extract')
+                                      if (v == 'extract') {
                                         _chooseAndExtract(item.entry);
+                                      }
                                       if (v == 'info') _entryInfo(item.entry!);
                                     },
                                     itemBuilder: (_) => const [
@@ -174,8 +175,9 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
     }
     final values = result.values.toList()
       ..sort((a, b) {
-        if (a.virtualDirectory != b.virtualDirectory)
+        if (a.virtualDirectory != b.virtualDirectory) {
           return a.virtualDirectory ? -1 : 1;
+        }
         return a.name.toLowerCase().compareTo(b.name.toLowerCase());
       });
     return values;
@@ -232,9 +234,11 @@ class _ExtractionDialogState extends State<_ExtractionDialog> {
   void initState() {
     super.initState();
     sub = widget.stream.listen((v) {
-      if (v.done)
+      if (v.done) {
         widget.done();
-      else if (mounted) setState(() => value = v);
+      } else if (mounted) {
+        setState(() => value = v);
+      }
     }, onError: (e) {
       if (mounted) setState(() => error = e);
     });

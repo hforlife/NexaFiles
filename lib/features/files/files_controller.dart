@@ -64,9 +64,10 @@ class FileManagerState {
     var filtered = showHidden
         ? entries
         : entries.where((e) => !isHiddenFileName(e.displayName));
-    if (query.trim().isNotEmpty)
+    if (query.trim().isNotEmpty) {
       filtered = filtered.where((e) =>
           e.displayName.toLowerCase().contains(query.trim().toLowerCase()));
+    }
     return sortEntries(filtered, sort, direction);
   }
 
@@ -135,8 +136,9 @@ class FilesController extends StateNotifier<FileManagerState> {
           persisted = await storage.grantedRoots();
       final known = records.map((e) => e.uri).toSet();
       for (final entry in persisted) {
-        if (!known.contains('${entry.uri}'))
+        if (!known.contains('${entry.uri}')) {
           await database.upsertRoot('${entry.uri}', entry.displayName);
+        }
       }
       records = await database.roots();
       final byUri = {for (final entry in persisted) '${entry.uri}': entry};
@@ -171,8 +173,9 @@ class FilesController extends StateNotifier<FileManagerState> {
     try {
       await storage.releaseRoot(root.uri);
     } catch (_) {}
-    if (state.path.isNotEmpty && state.path.first.entry.uri == root.uri)
+    if (state.path.isNotEmpty && state.path.first.entry.uri == root.uri) {
       state = state.copyWith(path: [], entries: [], selected: {});
+    }
     await loadRoots();
   }
 
@@ -291,8 +294,9 @@ class FilesController extends StateNotifier<FileManagerState> {
     final current = state.current;
     if (current == null) throw const StorageFailure('Aucun dossier ouvert');
     if (state.entries
-        .any((e) => e.displayName.toLowerCase() == name.trim().toLowerCase()))
+        .any((e) => e.displayName.toLowerCase() == name.trim().toLowerCase())) {
       throw const StorageFailure('Un élément porte déjà ce nom.');
+    }
     await storage.createDirectory(current.uri, name.trim());
     await refresh();
   }
@@ -302,8 +306,9 @@ class FilesController extends StateNotifier<FileManagerState> {
     if (error != null) throw StorageFailure(error);
     if (state.entries.any((e) =>
         e.uri != entry.uri &&
-        e.displayName.toLowerCase() == name.trim().toLowerCase()))
+        e.displayName.toLowerCase() == name.trim().toLowerCase())) {
       throw const StorageFailure('Un élément porte déjà ce nom.');
+    }
     await storage.rename(entry.uri, name.trim());
     await refresh();
   }

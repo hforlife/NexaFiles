@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'dart:io';
 import 'dart:typed_data';
 import 'package:archive/archive.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
@@ -24,14 +25,15 @@ class PdfReaderAdapter implements ReaderAdapter {
   Future<ReaderSession> open(
       ContentSource source, DetectedFormat format) async {
     final stopwatch = Stopwatch()..start();
-    if (source is! MaterializedContentSource)
+    if (source is! MaterializedContentSource) {
       throw const FormatException('Source PDF non matérialisable');
+    }
     final file = await source.materialize();
     const channel = MethodChannel('nexa_file/pdf');
     final count =
         await channel.invokeMethod<int>('pageCount', {'path': file.path});
     assert(() {
-      print(
+      debugPrint(
           'NexaFiles PDF open: ${stopwatch.elapsedMilliseconds} ms, ${file.lengthSync()} bytes');
       return true;
     }());
@@ -55,10 +57,11 @@ class PdfReaderSession implements ReaderSession {
         final result = await _channel.invokeMapMethod<Object?, Object?>(
             'render', {'path': file.path, 'page': page, 'width': width});
         final bytes = result?['bytes'] as Uint8List?;
-        if (bytes == null || bytes.length < 100)
+        if (bytes == null || bytes.length < 100) {
           throw const FormatException('Page PDF rendue vide');
+        }
         assert(() {
-          print(
+          debugPrint(
               '[PERF] PDF page ${page + 1}: native=${result?['durationMs']} ms, png=${bytes.length} bytes, bitmap=${result?['bitmapWidth']}x${result?['bitmapHeight']}');
           return true;
         }());
@@ -185,13 +188,16 @@ class EpubReaderAdapter implements ReaderAdapter {
       final id = _attr(tag, 'id'), href = _attr(tag, 'href');
       if (id != null && href != null) {
         manifest[id] = href;
-        if ((_attr(tag, 'properties') ?? '').split(' ').contains('cover-image'))
+        if ((_attr(tag, 'properties') ?? '')
+            .split(' ')
+            .contains('cover-image')) {
           coverHref = href;
+        }
       }
     }
     if (coverHref == null) {
       final coverId = RegExp(
-              """<meta\\b[^>]*name=[\"']cover[\"'][^>]*content=[\"']([^\"']+)""",
+              """<meta\\b[^>]*name=["']cover["'][^>]*content=["']([^"']+)""",
               caseSensitive: false)
           .firstMatch(opf)
           ?.group(1);
@@ -204,20 +210,23 @@ class EpubReaderAdapter implements ReaderAdapter {
           href = id == null ? null : manifest[id];
       if (href == null) continue;
       final raw = read('$base$href');
-      if (raw != null)
+      if (raw != null) {
         chapters.add(EpubChapter(
             _htmlTitle(raw) ?? 'Chapitre ${chapters.length + 1}',
             href,
             _stripHtml(raw)));
+      }
     }
-    if (chapters.isEmpty)
+    if (chapters.isEmpty) {
       throw const FormatException('EPUB sans contenu lisible');
+    }
     Uint8List? coverBytes;
     final coverFile = coverHref == null
         ? null
         : zip.files.where((e) => e.name == '$base$coverHref').firstOrNull;
-    if (coverFile != null)
+    if (coverFile != null) {
       coverBytes = Uint8List.fromList((coverFile.content as List<int>));
+    }
     return EpubReaderSession(
         source, title, author, chapters, coverBytes, rootDir.path, base);
   }

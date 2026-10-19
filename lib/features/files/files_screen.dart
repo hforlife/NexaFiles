@@ -88,8 +88,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   Widget _continueReading() => FutureBuilder<List<ContinueReadingRecord>>(
       future: ref.read(databaseProvider).continueReading(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.isEmpty)
+        if (!snapshot.hasData || snapshot.data!.isEmpty) {
           return const SizedBox.shrink();
+        }
         final item = snapshot.data!.first,
             cover = item.coverKey == null ? null : File(item.coverKey!);
         return Padding(
@@ -129,7 +130,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       });
   PreferredSizeWidget _appBar(
       FileManagerState state, FilesController controller) {
-    if (state.selecting)
+    if (state.selecting) {
       return AppBar(
           leading: IconButton(
               onPressed: controller.clearSelection,
@@ -146,6 +147,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                 onPressed: () => _selectionMenu(controller),
                 icon: const Icon(Icons.more_vert))
           ]);
+    }
     return AppBar(
         leading: state.browsing
             ? IconButton(
@@ -203,7 +205,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   }
 
   Widget _roots(FileManagerState state, FilesController controller) {
-    if (state.roots.isEmpty)
+    if (state.roots.isEmpty) {
       return EmptyState(
           icon: Icons.folder_open,
           title: 'Vos fichiers, à votre façon',
@@ -213,6 +215,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               onPressed: controller.addLocation,
               icon: const Icon(Icons.add),
               label: const Text('Ajouter un emplacement')));
+    }
     final roots = [...state.roots]
       ..sort((a, b) => (b.favorite ? 1 : 0).compareTo(a.favorite ? 1 : 0));
     final favorite = roots.where((e) => e.favorite).toList();
@@ -247,8 +250,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                         onTap: () => controller.openRoot(root),
                         onMenu: (v) {
                           if (v == 'favorite') controller.toggleFavorite(root);
-                          if (v == 'remove')
+                          if (v == 'remove') {
                             _confirmRemoveRoot(root, controller);
+                          }
                           if (v == 'reauthorize') controller.addLocation();
                         });
                   }),
@@ -304,7 +308,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 
   Widget _folder(FileManagerState state, FilesController controller) {
     final entries = state.visibleEntries;
-    if (entries.isEmpty)
+    if (entries.isEmpty) {
       return EmptyState(
           icon: state.query.isEmpty ? Icons.folder_open : Icons.search_off,
           title: state.query.isEmpty
@@ -313,6 +317,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
           message: state.query.isEmpty
               ? 'Créez un dossier ou actualisez le contenu.'
               : 'Essayez un autre nom.');
+    }
     void select(StorageEntry e) {
       HapticFeedback.selectionClick();
       controller.toggleSelection(e);
@@ -405,7 +410,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
             fileName: entry.displayName,
             archiveEntries: entries.map((e) => e.path));
         if (detected.content == ContentKind.archive) {
-          if (mounted)
+          if (mounted) {
             await Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -415,6 +420,7 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                         storage: controller.storage,
                         roots: state.roots,
                         defaultDestination: state.current?.uri)));
+          }
           return;
         }
         await archive.close();
@@ -514,10 +520,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
 
   void _menu(String value, FileManagerState state, FilesController controller) {
     if (value == 'folder') _createFolder(controller);
-    if (value == 'view')
+    if (value == 'view') {
       controller.setViewMode(state.viewMode == FileViewMode.list
           ? FileViewMode.grid
           : FileViewMode.list);
+    }
     if (value == 'sort') _sortSheet(state, controller);
     if (value == 'refresh') controller.refresh();
   }
@@ -565,10 +572,11 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
       String action, StorageEntry entry, FilesController controller) {
     if (action == 'rename') _rename(entry, controller);
     if (action == 'info') _info(entry);
-    if (action == 'open')
+    if (action == 'open') {
       controller.storage
           .openExternal(entry.uri, mimeType: entry.mimeType)
           .catchError(_error);
+    }
     if (action == 'delete') {
       controller.toggleSelection(entry);
       _delete(controller);
@@ -959,10 +967,11 @@ class _EntryVisual extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final cover = item?.coverKey == null ? null : File(item!.coverKey!);
-    if (cover != null && cover.existsSync())
+    if (cover != null && cover.existsSync()) {
       return ClipRRect(
           borderRadius: BorderRadius.circular(AppRadius.sm),
           child: Image.file(cover, fit: BoxFit.cover, cacheWidth: 300));
+    }
     final mime = entry.mimeType ?? '',
         previewable = mime.startsWith('image/') ||
             mime.startsWith('audio/') ||
@@ -970,7 +979,7 @@ class _EntryVisual extends StatelessWidget {
             RegExp(r'\.(jpe?g|png|webp|mp3|m4a|aac|ogg|wav|flac|mp4|m4v|webm|mkv|3gp)$',
                     caseSensitive: false)
                 .hasMatch(entry.displayName);
-    if (previewable)
+    if (previewable) {
       return FutureBuilder<Uint8List?>(
           future: FilePreviewService.instance.imageThumbnail(entry),
           builder: (context, snapshot) => snapshot.data == null
@@ -979,6 +988,7 @@ class _EntryVisual extends StatelessWidget {
                   borderRadius: BorderRadius.circular(AppRadius.sm),
                   child: Image.memory(snapshot.data!,
                       fit: BoxFit.cover, gaplessPlayback: true)));
+    }
     return _placeholder(context);
   }
 
@@ -1111,7 +1121,9 @@ class _OperationDialogState extends State<_OperationDialog> {
     subscription = widget.stream.listen((p) {
       if (p.done) {
         widget.onDone();
-      } else if (mounted) setState(() => progress = p);
+      } else if (mounted) {
+        setState(() => progress = p);
+      }
     }, onError: (e) {
       if (mounted) setState(() => error = e);
     });

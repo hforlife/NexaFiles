@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -70,8 +69,9 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     final progress = await widget.database.progress(widget.itemId);
     if (progress != null) {
       final locator = ReadingLocator.decode(progress.locator);
-      if (locator is ComicLocator)
+      if (locator is ComicLocator) {
         page = locator.page.clamp(0, (count - 1).clamp(0, count)).toInt();
+      }
     }
     pageController = PageController(initialPage: _viewIndexForPage(page));
     scrollController = ScrollController(initialScrollOffset: page * 600.0)
@@ -92,11 +92,12 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   void _verticalProgress() {
     if (scrollController == null || !scrollController!.hasClients) return;
     final viewport = scrollController!.position.viewportDimension;
-    if (viewport > 0)
+    if (viewport > 0) {
       _setPage((scrollController!.offset / viewport)
           .round()
           .clamp(0, (count - 1).clamp(0, count))
           .toInt());
+    }
   }
 
   void _setPage(int value) {
@@ -127,7 +128,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (loading)
+    if (loading) {
       return const Scaffold(
           backgroundColor: Colors.black,
           body: Center(
@@ -136,6 +137,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
             SizedBox(height: 16),
             Text('Indexation…', style: TextStyle(color: Colors.white))
           ])));
+    }
     return Scaffold(
         backgroundColor: Colors.black,
         body: GestureDetector(
@@ -146,11 +148,12 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   }
 
   Widget _content() {
-    if (count == 0)
+    if (count == 0) {
       return const Center(
           child: Text('Aucune page lisible',
               style: TextStyle(color: Colors.white)));
-    if (mode == ComicReadingMode.vertical)
+    }
+    if (mode == ComicReadingMode.vertical) {
       return NotificationListener<ScrollNotification>(
           onNotification: (_) => false,
           child: ListView.builder(
@@ -160,6 +163,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
                   height: MediaQuery.sizeOf(context).height,
                   child: _Page(
                       source: widget.session.pages, index: i, fit: fit))));
+    }
     return PageView.builder(
         controller: pageController,
         itemCount: _viewCount,
@@ -171,13 +175,15 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   }
 
   Widget _spread(int index) {
-    if (index == 0)
+    if (index == 0) {
       return _Page(source: widget.session.pages, index: 0, fit: fit);
+    }
     final first = (index - 1) * 2 + 1,
         second = first + 1,
         pages = [first, if (second < count) second];
-    if (direction == ComicReadingDirection.rightToLeft)
+    if (direction == ComicReadingDirection.rightToLeft) {
       pages.replaceRange(0, pages.length, pages.reversed);
+    }
     return Row(children: [
       for (final value in pages)
         Expanded(
@@ -344,12 +350,14 @@ class _Page extends StatelessWidget {
   Widget build(BuildContext context) => FutureBuilder<ComicPage>(
       future: source.getPage(index),
       builder: (_, snapshot) {
-        if (snapshot.hasError)
+        if (snapshot.hasError) {
           return const Center(
               child: Icon(Icons.broken_image_outlined,
                   color: Colors.white54, size: 48));
-        if (!snapshot.hasData)
+        }
+        if (!snapshot.hasData) {
           return const Center(child: CircularProgressIndicator());
+        }
         return _ZoomComicImage(bytes: snapshot.data!.bytes, fit: fit);
       });
 }

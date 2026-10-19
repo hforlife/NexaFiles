@@ -30,10 +30,12 @@ class _TrashScreenState extends ConsumerState<TrashScreen> {
       body: FutureBuilder<List<TrashItem>>(
           future: items,
           builder: (c, s) {
-            if (!s.hasData)
+            if (!s.hasData) {
               return const Center(child: CircularProgressIndicator());
-            if (s.data!.isEmpty)
+            }
+            if (s.data!.isEmpty) {
               return const Center(child: Text('La corbeille est vide'));
+            }
             return ListView(children: [
               for (final item in s.data!)
                 ListTile(

@@ -51,12 +51,13 @@ class _AudioReaderScreenState extends State<AudioReaderScreen> {
 
   Future<void> _poll() async {
     final state = await channel.invokeMapMethod<Object?, Object?>('state');
-    if (mounted && state != null)
+    if (mounted && state != null) {
       setState(() {
         position = state['position'] as int;
         duration = (state['duration'] as int).clamp(1, 1 << 31).toInt();
         playing = state['playing'] as bool;
       });
+    }
   }
 
   Future<void> _skip(int delta) async {

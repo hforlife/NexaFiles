@@ -8,26 +8,29 @@ class FormatDetector {
       String? fileName,
       Iterable<String>? archiveEntries}) {
     final name = (fileName ?? '').toLowerCase();
-    if (_has(prefix, [0x25, 0x50, 0x44, 0x46, 0x2d]))
+    if (_has(prefix, [0x25, 0x50, 0x44, 0x46, 0x2d])) {
       return const DetectedFormat(
           container: ContainerFormat.none,
           content: ContentKind.pdf,
           confidence: 1,
           evidence: ['magic:pdf']);
-    if (_has(prefix, [0x52, 0x61, 0x72, 0x21, 0x1a, 0x07]))
+    }
+    if (_has(prefix, [0x52, 0x61, 0x72, 0x21, 0x1a, 0x07])) {
       return DetectedFormat(
           container: ContainerFormat.rar,
           content:
               name.endsWith('.cbr') ? ContentKind.comic : ContentKind.archive,
           confidence: .99,
           evidence: const ['magic:rar']);
-    if (_has(prefix, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c]))
+    }
+    if (_has(prefix, [0x37, 0x7a, 0xbc, 0xaf, 0x27, 0x1c])) {
       return DetectedFormat(
           container: ContainerFormat.sevenZip,
           content:
               name.endsWith('.cb7') ? ContentKind.comic : ContentKind.archive,
           confidence: 1,
           evidence: const ['magic:7z']);
+    }
     if (_has(prefix, [0x50, 0x4b, 0x03, 0x04]) ||
         _has(prefix, [0x50, 0x4b, 0x05, 0x06])) {
       final entries = archiveEntries?.map((e) => e.toLowerCase()).toList() ??
@@ -87,40 +90,46 @@ class FormatDetector {
         _has(prefix, [0x47, 0x49, 0x46, 0x38]) ||
         (prefix.length >= 12 &&
             ascii.decode(prefix.sublist(0, 4), allowInvalid: true) == 'RIFF' &&
-            ascii.decode(prefix.sublist(8, 12), allowInvalid: true) == 'WEBP'))
+            ascii.decode(prefix.sublist(8, 12), allowInvalid: true) ==
+                'WEBP')) {
       return const DetectedFormat(
           container: ContainerFormat.none,
           content: ContentKind.image,
           confidence: 1,
           evidence: ['magic:image']);
+    }
     if (mimeType?.startsWith('audio/') == true ||
-        RegExp(r'\.(mp3|m4a|aac|ogg|wav|flac)$').hasMatch(name))
+        RegExp(r'\.(mp3|m4a|aac|ogg|wav|flac)$').hasMatch(name)) {
       return const DetectedFormat(
           container: ContainerFormat.none,
           content: ContentKind.audio,
           confidence: .9,
           evidence: ['mime/extension:audio']);
+    }
     if (mimeType?.startsWith('video/') == true ||
-        RegExp(r'\.(mp4|m4v|webm|mkv|3gp)$').hasMatch(name))
+        RegExp(r'\.(mp4|m4v|webm|mkv|3gp)$').hasMatch(name)) {
       return const DetectedFormat(
           container: ContainerFormat.none,
           content: ContentKind.video,
           confidence: .9,
           evidence: ['mime/extension:video']);
+    }
     if (name.endsWith('.md') ||
         name.endsWith('.markdown') ||
-        mimeType == 'text/markdown')
+        mimeType == 'text/markdown') {
       return const DetectedFormat(
           container: ContainerFormat.none,
           content: ContentKind.markdown,
           confidence: .85,
           evidence: ['mime/extension:markdown']);
-    if (mimeType?.startsWith('text/') == true || name.endsWith('.txt'))
+    }
+    if (mimeType?.startsWith('text/') == true || name.endsWith('.txt')) {
       return const DetectedFormat(
           container: ContainerFormat.none,
           content: ContentKind.text,
           confidence: .6,
           evidence: ['mime/extension:text']);
+    }
     return const DetectedFormat(
         container: ContainerFormat.none,
         content: ContentKind.unknown,

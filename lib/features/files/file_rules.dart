@@ -14,8 +14,9 @@ String? validateEntryName(String value) {
       name == '..' ||
       name.contains('/') ||
       name.contains('\\') ||
-      name.contains('\u0000'))
+      name.contains('\u0000')) {
     return 'Ce nom contient des caractères non autorisés.';
+  }
   if (name.length > 255) return 'Ce nom est trop long.';
   return null;
 }

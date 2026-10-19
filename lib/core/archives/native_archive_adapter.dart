@@ -1,4 +1,3 @@
-import 'dart:typed_data';
 import 'package:flutter/services.dart';
 import '../formats/detected_format.dart';
 import '../storage/content_source.dart';

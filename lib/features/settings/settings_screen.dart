@@ -34,7 +34,7 @@ class SettingsScreen extends ConsumerWidget {
               onChanged: (v) => settings.setThemeMode(v!),
               title: Text(s.dark)),
           const Divider(),
-          _Header('Langue / Language'),
+          const _Header('Langue / Language'),
           SegmentedButton<Locale>(segments: const [
             ButtonSegment(value: Locale('fr'), label: Text('Français')),
             ButtonSegment(value: Locale('en'), label: Text('English'))

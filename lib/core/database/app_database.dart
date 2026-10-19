@@ -36,12 +36,14 @@ class AppDatabase extends GeneratedDatabase {
         await customStatement(
             'CREATE TABLE collection_items (collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE, item_id TEXT NOT NULL REFERENCES library_items(id) ON DELETE CASCADE, added_at INTEGER NOT NULL, PRIMARY KEY(collection_id,item_id))');
       }, onUpgrade: (m, from, to) async {
-        if (from < 2)
+        if (from < 2) {
           await customStatement(
               'CREATE TABLE IF NOT EXISTS favorite_folders (uri TEXT PRIMARY KEY, display_name TEXT NOT NULL, added_at INTEGER NOT NULL)');
-        if (from < 3)
+        }
+        if (from < 3) {
           await customStatement(
               'CREATE TABLE IF NOT EXISTS reader_preferences (item_id TEXT PRIMARY KEY, reading_mode TEXT NOT NULL, reading_direction TEXT NOT NULL, fit_mode TEXT NOT NULL)');
+        }
         if (from < 4) {
           await customStatement(
               'ALTER TABLE library_items ADD COLUMN added_at INTEGER NOT NULL DEFAULT 0');
@@ -275,9 +277,10 @@ class AppDatabase extends GeneratedDatabase {
         variables: [Variable.withString(rootUri)]).get();
     for (final row in rows) {
       final uri = row.read<String>('source_uri');
-      if (!seen.contains(uri))
+      if (!seen.contains(uri)) {
         await customStatement(
             'UPDATE library_items SET unavailable=1 WHERE source_uri=?', [uri]);
+      }
     }
   }
 
