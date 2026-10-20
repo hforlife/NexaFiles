@@ -22,71 +22,107 @@ class _ComicSettingsSectionState extends State<ComicSettingsSection> {
     final p = await SharedPreferences.getInstance();
     if (mounted) {
       setState(() {
-        mode = ComicReadingMode.values
-            .byName(p.getString('comic.default.mode') ?? mode.name);
-        direction = ComicReadingDirection.values
-            .byName(p.getString('comic.default.direction') ?? direction.name);
-        fit = ComicFitMode.values
-            .byName(p.getString('comic.default.fit') ?? fit.name);
+        mode = ComicReadingMode.values.byName(
+          p.getString('comic.default.mode') ?? mode.name,
+        );
+        direction = ComicReadingDirection.values.byName(
+          p.getString('comic.default.direction') ?? direction.name,
+        );
+        fit = ComicFitMode.values.byName(
+          p.getString('comic.default.fit') ?? fit.name,
+        );
       });
     }
   }
 
   Future<void> _choose() async {
     await showModalBottomSheet(
-        context: context,
-        builder: (context) => SafeArea(
-                child: ListView(shrinkWrap: true, children: [
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setSheet) => SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
               const ListTile(title: Text('Mode par défaut')),
-              for (final v in ComicReadingMode.values)
-                RadioListTile(
-                    value: v,
-                    groupValue: mode,
-                    title: Text(switch (v) {
-                      ComicReadingMode.single => 'Page unique',
-                      ComicReadingMode.vertical => 'Vertical',
-                      ComicReadingMode.doublePage => 'Double page'
-                    }),
-                    onChanged: (x) {
-                      setState(() => mode = x!);
-                      SharedPreferences.getInstance().then(
-                          (p) => p.setString('comic.default.mode', x!.name));
-                      Navigator.pop(context);
-                    }),
+              RadioGroup<ComicReadingMode>(
+                groupValue: mode,
+                onChanged: (x) {
+                  setState(() => mode = x!);
+                  SharedPreferences.getInstance().then(
+                    (p) => p.setString('comic.default.mode', x!.name),
+                  );
+                  Navigator.pop(context);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final v in ComicReadingMode.values)
+                      RadioListTile<ComicReadingMode>(
+                        value: v,
+                        title: Text(switch (v) {
+                          ComicReadingMode.single => 'Page unique',
+                          ComicReadingMode.vertical => 'Vertical',
+                          ComicReadingMode.doublePage => 'Double page',
+                        }),
+                      ),
+                  ],
+                ),
+              ),
               SwitchListTile(
-                  value: direction == ComicReadingDirection.rightToLeft,
-                  title: const Text('Droite → gauche'),
-                  onChanged: (x) {
-                    setState(() => direction = x
+                value: direction == ComicReadingDirection.rightToLeft,
+                title: const Text('Droite → gauche'),
+                onChanged: (x) {
+                  setState(
+                    () => direction = x
                         ? ComicReadingDirection.rightToLeft
-                        : ComicReadingDirection.leftToRight);
-                    SharedPreferences.getInstance().then((p) =>
-                        p.setString('comic.default.direction', direction.name));
-                  }),
+                        : ComicReadingDirection.leftToRight,
+                  );
+                  setSheet(() {});
+                  SharedPreferences.getInstance().then(
+                    (p) =>
+                        p.setString('comic.default.direction', direction.name),
+                  );
+                },
+              ),
               const ListTile(title: Text('Ajustement')),
-              for (final v in ComicFitMode.values)
-                RadioListTile(
-                    value: v,
-                    groupValue: fit,
-                    title: Text(switch (v) {
-                      ComicFitMode.width => 'Largeur',
-                      ComicFitMode.height => 'Hauteur',
-                      ComicFitMode.free => 'Libre'
-                    }),
-                    onChanged: (x) {
-                      setState(() => fit = x!);
-                      SharedPreferences.getInstance().then(
-                          (p) => p.setString('comic.default.fit', x!.name));
-                      Navigator.pop(context);
-                    })
-            ])));
+              RadioGroup<ComicFitMode>(
+                groupValue: fit,
+                onChanged: (x) {
+                  setState(() => fit = x!);
+                  SharedPreferences.getInstance().then(
+                    (p) => p.setString('comic.default.fit', x!.name),
+                  );
+                  Navigator.pop(context);
+                },
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (final v in ComicFitMode.values)
+                      RadioListTile<ComicFitMode>(
+                        value: v,
+                        title: Text(switch (v) {
+                          ComicFitMode.width => 'Largeur',
+                          ComicFitMode.height => 'Hauteur',
+                          ComicFitMode.free => 'Libre',
+                        }),
+                      ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) => ListTile(
-      leading: const Icon(Icons.auto_stories_outlined),
-      title: const Text('Lecture Manga / BD'),
-      subtitle: Text(
-          '${mode.name} • ${direction == ComicReadingDirection.rightToLeft ? 'RTL' : 'LTR'} • ${fit.name}'),
-      onTap: _choose);
+    leading: const Icon(Icons.auto_stories_outlined),
+    title: const Text('Lecture Manga / BD'),
+    subtitle: Text(
+      '${mode.name} • ${direction == ComicReadingDirection.rightToLeft ? 'RTL' : 'LTR'} • ${fit.name}',
+    ),
+    onTap: _choose,
+  );
 }

@@ -16,7 +16,7 @@ class MainShell extends ConsumerWidget {
     FilesScreen(),
     LibraryScreen(),
     RecentsScreen(),
-    ToolsScreen()
+    ToolsScreen(),
   ];
 
   /// Single owner of the system back button for every tab: folder navigation
@@ -44,43 +44,54 @@ class MainShell extends ConsumerWidget {
         tab = ref.watch(currentTabProvider),
         index = tab.index;
     return PopScope(
-        canPop: false,
-        onPopInvoked: (didPop) {
-          if (!didPop) _handleBack(context, ref);
-        },
-        child: Scaffold(
-            appBar: tab == AppTab.files
-                ? null
-                : AppBar(title: Text(titles[index]), actions: [
-                    IconButton(
-                        tooltip: s.settings,
-                        onPressed: () =>
-                            Navigator.pushNamed(context, AppRoutes.settings),
-                        icon: const Icon(Icons.settings_outlined))
-                  ]),
-            body: IndexedStack(index: index, children: pages),
-            bottomNavigationBar: NavigationBar(
-                selectedIndex: index,
-                onDestinationSelected: (value) => ref
-                    .read(currentTabProvider.notifier)
-                    .state = AppTab.values[value],
-                destinations: [
-                  NavigationDestination(
-                      icon: const Icon(Icons.folder_outlined),
-                      selectedIcon: const Icon(Icons.folder),
-                      label: s.files),
-                  NavigationDestination(
-                      icon: const Icon(Icons.local_library_outlined),
-                      selectedIcon: const Icon(Icons.local_library),
-                      label: s.library),
-                  NavigationDestination(
-                      icon: const Icon(Icons.history_outlined),
-                      selectedIcon: const Icon(Icons.history),
-                      label: s.recents),
-                  NavigationDestination(
-                      icon: const Icon(Icons.build_outlined),
-                      selectedIcon: const Icon(Icons.build),
-                      label: s.tools)
-                ])));
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleBack(context, ref);
+      },
+      child: Scaffold(
+        appBar: tab == AppTab.files
+            ? null
+            : AppBar(
+                title: Text(titles[index]),
+                actions: [
+                  IconButton(
+                    tooltip: s.settings,
+                    onPressed: () =>
+                        Navigator.pushNamed(context, AppRoutes.settings),
+                    icon: const Icon(Icons.settings_outlined),
+                  ),
+                ],
+              ),
+        body: IndexedStack(index: index, children: pages),
+        bottomNavigationBar: NavigationBar(
+          selectedIndex: index,
+          onDestinationSelected: (value) =>
+              ref.read(currentTabProvider.notifier).state =
+                  AppTab.values[value],
+          destinations: [
+            NavigationDestination(
+              icon: const Icon(Icons.folder_outlined),
+              selectedIcon: const Icon(Icons.folder),
+              label: s.files,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.local_library_outlined),
+              selectedIcon: const Icon(Icons.local_library),
+              label: s.library,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.history_outlined),
+              selectedIcon: const Icon(Icons.history),
+              label: s.recents,
+            ),
+            NavigationDestination(
+              icon: const Icon(Icons.build_outlined),
+              selectedIcon: const Icon(Icons.build),
+              label: s.tools,
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

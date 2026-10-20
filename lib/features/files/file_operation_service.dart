@@ -20,12 +20,13 @@ class OperationCancelled extends AppFailure {
 }
 
 class FileOperationProgress {
-  const FileOperationProgress(
-      {required this.kind,
-      required this.completed,
-      required this.total,
-      this.currentName,
-      this.done = false});
+  const FileOperationProgress({
+    required this.kind,
+    required this.completed,
+    required this.total,
+    this.currentName,
+    this.done = false,
+  });
   final FileOperationKind kind;
   final int completed, total;
   final String? currentName;
@@ -41,12 +42,13 @@ class OperationResult {
 class FileOperationService {
   FileOperationService(this.storage);
   final StorageRepository storage;
-  Stream<FileOperationProgress> transfer(
-      {required List<StorageEntry> sources,
-      required Uri destination,
-      required bool move,
-      required ConflictPolicy conflict,
-      CancellationToken? cancellation}) {
+  Stream<FileOperationProgress> transfer({
+    required List<StorageEntry> sources,
+    required Uri destination,
+    required bool move,
+    required ConflictPolicy conflict,
+    CancellationToken? cancellation,
+  }) {
     final controller = StreamController<FileOperationProgress>();
     final token = cancellation ?? CancellationToken();
     () async {
@@ -54,19 +56,25 @@ class FileOperationService {
       try {
         for (final source in sources) {
           token.throwIfCancelled();
-          controller.add(FileOperationProgress(
+          controller.add(
+            FileOperationProgress(
               kind: move ? FileOperationKind.move : FileOperationKind.copy,
               completed: completed,
               total: sources.length,
-              currentName: source.displayName));
+              currentName: source.displayName,
+            ),
+          );
           await _transferEntry(source, destination, conflict, move: move);
           completed++;
         }
-        controller.add(FileOperationProgress(
+        controller.add(
+          FileOperationProgress(
             kind: move ? FileOperationKind.move : FileOperationKind.copy,
             completed: completed,
             total: sources.length,
-            done: true));
+            done: true,
+          ),
+        );
         await controller.close();
       } catch (e, st) {
         controller.addError(mapFailure(e), st);
@@ -78,18 +86,24 @@ class FileOperationService {
 
   /// Copies or moves one entry (file or whole folder) into [destination].
   Future<void> _transferEntry(
-      StorageEntry source, Uri destination, ConflictPolicy policy,
-      {required bool move}) async {
+    StorageEntry source,
+    Uri destination,
+    ConflictPolicy policy, {
+    required bool move,
+  }) async {
     if (source.uri == destination ||
         _looksDescendant(source.uri, destination)) {
       throw const StorageFailure(
-          'La destination ne peut pas être située dans la source.');
+        'La destination ne peut pas être située dans la source.',
+      );
     }
     final children = await storage.list(destination),
         names = children.map((e) => e.displayName.toLowerCase()).toSet();
     final existing = children
-        .where((e) =>
-            e.displayName.toLowerCase() == source.displayName.toLowerCase())
+        .where(
+          (e) =>
+              e.displayName.toLowerCase() == source.displayName.toLowerCase(),
+        )
         .firstOrNull;
     var name = source.displayName;
     StorageEntry? replaceTarget;

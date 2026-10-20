@@ -6,8 +6,9 @@ class ComicHeuristic {
   final int minimumImages;
   final double minimumImageRatio;
   bool isComic(Iterable<ArchiveEntry> entries) {
-    final files =
-            entries.where((e) => !e.isDirectory && !_ignored(e.path)).toList(),
+    final files = entries
+            .where((e) => !e.isDirectory && !_ignored(e.path))
+            .toList(),
         images = files.where((e) => isComicImage(e.path)).length;
     return images >= minimumImages &&
         files.isNotEmpty &&

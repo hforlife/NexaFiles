@@ -35,35 +35,43 @@ class _DocumentSettingsSectionState extends State<DocumentSettingsSection> {
   }
 
   @override
-  Widget build(BuildContext context) => Column(children: [
-        const ListTile(
-            leading: Icon(Icons.picture_as_pdf_outlined),
-            title: Text('PDF'),
-            subtitle: Text(
-                'Défilement continu et page unique disponibles dans le lecteur')),
-        ListTile(
-            leading: const Icon(Icons.menu_book_outlined),
-            title: const Text('EPUB'),
-            subtitle: Text('Taille ${epubSize.round()} • thème $epubTheme'),
-            trailing: PopupMenuButton<String>(
-                onSelected: (v) {
-                  setState(() => epubTheme = v);
-                  _set('epub.theme', v);
-                },
-                itemBuilder: (_) => const [
-                      PopupMenuItem(value: 'light', child: Text('Clair')),
-                      PopupMenuItem(value: 'dark', child: Text('Sombre')),
-                      PopupMenuItem(value: 'sepia', child: Text('Sépia'))
-                    ])),
-        ListTile(
-            leading: const Icon(Icons.text_snippet_outlined),
-            title: const Text('Texte'),
-            subtitle: Text('Taille par défaut ${textSize.round()}'),
-            trailing: IconButton(
-                onPressed: () {
-                  setState(() => textSize = textSize >= 21 ? 15 : textSize + 2);
-                  _set('text.fontSize', textSize);
-                },
-                icon: const Icon(Icons.text_increase)))
-      ]);
+  Widget build(BuildContext context) => Column(
+    children: [
+      const ListTile(
+        leading: Icon(Icons.picture_as_pdf_outlined),
+        title: Text('PDF'),
+        subtitle: Text(
+          'Défilement continu et page unique disponibles dans le lecteur',
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.menu_book_outlined),
+        title: const Text('EPUB'),
+        subtitle: Text('Taille ${epubSize.round()} • thème $epubTheme'),
+        trailing: PopupMenuButton<String>(
+          onSelected: (v) {
+            setState(() => epubTheme = v);
+            _set('epub.theme', v);
+          },
+          itemBuilder: (_) => const [
+            PopupMenuItem(value: 'light', child: Text('Clair')),
+            PopupMenuItem(value: 'dark', child: Text('Sombre')),
+            PopupMenuItem(value: 'sepia', child: Text('Sépia')),
+          ],
+        ),
+      ),
+      ListTile(
+        leading: const Icon(Icons.text_snippet_outlined),
+        title: const Text('Texte'),
+        subtitle: Text('Taille par défaut ${textSize.round()}'),
+        trailing: IconButton(
+          onPressed: () {
+            setState(() => textSize = textSize >= 21 ? 15 : textSize + 2);
+            _set('text.fontSize', textSize);
+          },
+          icon: const Icon(Icons.text_increase),
+        ),
+      ),
+    ],
+  );
 }

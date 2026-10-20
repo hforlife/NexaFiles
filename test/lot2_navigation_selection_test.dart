@@ -7,14 +7,16 @@ import 'package:nexa_file/core/storage/storage_repository.dart';
 import 'package:nexa_file/features/files/files_controller.dart';
 
 StorageEntry _file(String name) => StorageEntry(
-    uri: Uri.parse('content://tree/root/$name'),
-    displayName: name,
-    kind: StorageEntryKind.file);
+  uri: Uri.parse('content://tree/root/$name'),
+  displayName: name,
+  kind: StorageEntryKind.file,
+);
 
 StorageEntry _dir(String name) => StorageEntry(
-    uri: Uri.parse('content://tree/$name'),
-    displayName: name,
-    kind: StorageEntryKind.directory);
+  uri: Uri.parse('content://tree/$name'),
+  displayName: name,
+  kind: StorageEntryKind.directory,
+);
 
 /// Only `list` is exercised; every listing returns the same children.
 class _FakeStorage implements StorageRepository {
@@ -39,8 +41,11 @@ void main() {
 
   setUp(() async {
     SharedPreferences.setMockInitialValues({});
-    storage = _FakeStorage(
-        [_file('.secret.pdf'), _file('book.epub'), _file('notes.txt')]);
+    storage = _FakeStorage([
+      _file('.secret.pdf'),
+      _file('book.epub'),
+      _file('notes.txt'),
+    ]);
     database = AppDatabase(NativeDatabase.memory());
     controller = FilesController(storage, database);
     await controller.openFolder(_dir('root'));
@@ -49,8 +54,10 @@ void main() {
 
   test('select all never includes hidden files', () {
     controller.selectAll();
-    expect(controller.selectedEntries.map((e) => e.displayName),
-        unorderedEquals(['book.epub', 'notes.txt']));
+    expect(
+      controller.selectedEntries.map((e) => e.displayName),
+      unorderedEquals(['book.epub', 'notes.txt']),
+    );
     expect(controller.state.selected.length, 2);
   });
 
@@ -63,8 +70,9 @@ void main() {
   test('narrowing the search drops entries that are no longer visible', () {
     controller.selectAll();
     controller.search('notes');
-    expect(controller.state.selected,
-        {Uri.parse('content://tree/root/notes.txt')});
+    expect(controller.state.selected, {
+      Uri.parse('content://tree/root/notes.txt'),
+    });
   });
 
   test('hiding hidden files drops them from the selection', () async {
@@ -72,8 +80,10 @@ void main() {
     controller.selectAll();
     expect(controller.state.selected.length, 3);
     await controller.setShowHidden(false);
-    expect(controller.selectedEntries.map((e) => e.displayName),
-        unorderedEquals(['book.epub', 'notes.txt']));
+    expect(
+      controller.selectedEntries.map((e) => e.displayName),
+      unorderedEquals(['book.epub', 'notes.txt']),
+    );
     expect(controller.state.selected.length, 2);
   });
 

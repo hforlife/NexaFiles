@@ -12,13 +12,17 @@ class StorageFailure extends AppFailure {
 }
 
 class PermissionFailure extends AppFailure {
-  const PermissionFailure(
-      [super.message = 'Autorisation de stockage refusée', super.cause]);
+  const PermissionFailure([
+    super.message = 'Autorisation de stockage refusée',
+    super.cause,
+  ]);
 }
 
 class UnsupportedFormatFailure extends AppFailure {
-  const UnsupportedFormatFailure(
-      [super.message = 'Format non pris en charge', super.cause]);
+  const UnsupportedFormatFailure([
+    super.message = 'Format non pris en charge',
+    super.cause,
+  ]);
 }
 
 class ReaderFailure extends AppFailure {
@@ -30,13 +34,17 @@ class ArchiveFailure extends AppFailure {
 }
 
 class CorruptedFileFailure extends AppFailure {
-  const CorruptedFileFailure(
-      [super.message = 'Le fichier est endommagé', super.cause]);
+  const CorruptedFileFailure([
+    super.message = 'Le fichier est endommagé',
+    super.cause,
+  ]);
 }
 
 class InsufficientSpaceFailure extends AppFailure {
-  const InsufficientSpaceFailure(
-      [super.message = 'Espace de stockage insuffisant', super.cause]);
+  const InsufficientSpaceFailure([
+    super.message = 'Espace de stockage insuffisant',
+    super.cause,
+  ]);
 }
 
 AppFailure mapFailure(Object error) => error is AppFailure

@@ -11,7 +11,7 @@ class DocumentCoverService {
   final AppDatabase database;
   Future<void> ensurePdf(String itemId, PdfReaderSession session) async {
     try {
-      await _save(itemId, await session.render(0, width: 300));
+      await _save(itemId, await session.renderThumbnail(0));
     } catch (_) {}
   }
 

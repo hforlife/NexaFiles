@@ -5,12 +5,15 @@ import 'reader_core.dart';
 class MediaReaderAdapter implements ReaderAdapter {
   const MediaReaderAdapter();
   @override
-  Set<ContentKind> get supportedKinds =>
-      const {ContentKind.audio, ContentKind.video};
+  Set<ContentKind> get supportedKinds => const {
+    ContentKind.audio,
+    ContentKind.video,
+  };
   @override
   Future<ReaderSession> open(
-          ContentSource source, DetectedFormat format) async =>
-      MediaReaderSession(source, format.content);
+    ContentSource source,
+    DetectedFormat format,
+  ) async => MediaReaderSession(source, format.content);
 }
 
 class MediaReaderSession implements ReaderSession {

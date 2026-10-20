@@ -19,8 +19,10 @@ class CacheManager {
     var total = 0;
     for (final value in roots) {
       final dir = await directory(value);
-      await for (final entity
-          in dir.list(recursive: true, followLinks: false)) {
+      await for (final entity in dir.list(
+        recursive: true,
+        followLinks: false,
+      )) {
         if (entity is File) total += await entity.length();
       }
     }
@@ -50,11 +52,13 @@ class CacheManager {
     final files = <File>[];
     for (final category in CacheCategory.values) {
       final dir = await directory(category);
-      files.addAll(await dir
-          .list(recursive: true)
-          .where((e) => e is File)
-          .cast<File>()
-          .toList());
+      files.addAll(
+        await dir
+            .list(recursive: true)
+            .where((e) => e is File)
+            .cast<File>()
+            .toList(),
+      );
     }
     files.sort((a, b) => a.lastModifiedSync().compareTo(b.lastModifiedSync()));
     for (final file in files) {

@@ -7,51 +7,61 @@ import 'package:nexa_file/core/formats/format_detector.dart';
 
 ArchiveEntry entry(String path, {int compressed = 10, int expanded = 100}) =>
     ArchiveEntry(
-        path: path,
-        compressedSize: compressed,
-        uncompressedSize: expanded,
-        isDirectory: false);
+      path: path,
+      compressedSize: compressed,
+      uncompressedSize: expanded,
+      isDirectory: false,
+    );
 
 void main() {
   group('comic detection', () {
     test('CBZ extension is a comic before listing', () {
-      final result = FormatDetector()
-          .detect(prefix: [0x50, 0x4b, 0x03, 0x04], fileName: 'album.cbz');
+      final result = FormatDetector().detect(
+        prefix: [0x50, 0x4b, 0x03, 0x04],
+        fileName: 'album.cbz',
+      );
       expect(result.content, ContentKind.comic);
     });
 
     test('ordinary ZIP requires five images and 70 percent ratio', () {
       const heuristic = ComicHeuristic();
       expect(
-          heuristic.isComic(
-              [entry('1.jpg'), entry('2.jpg'), entry('3.jpg'), entry('4.jpg')]),
-          isFalse);
+        heuristic.isComic([
+          entry('1.jpg'),
+          entry('2.jpg'),
+          entry('3.jpg'),
+          entry('4.jpg'),
+        ]),
+        isFalse,
+      );
       expect(
-          heuristic.isComic([
-            entry('1.jpg'),
-            entry('2.jpg'),
-            entry('3.png'),
-            entry('4.webp'),
-            entry('5.jpg'),
-            entry('notes.txt'),
-          ]),
-          isTrue);
+        heuristic.isComic([
+          entry('1.jpg'),
+          entry('2.jpg'),
+          entry('3.png'),
+          entry('4.webp'),
+          entry('5.jpg'),
+          entry('notes.txt'),
+        ]),
+        isTrue,
+      );
     });
 
     test('metadata and hidden files do not dilute the ratio', () {
       const heuristic = ComicHeuristic();
       expect(
-          heuristic.isComic([
-            entry('001.jpg'),
-            entry('002.jpg'),
-            entry('003.jpg'),
-            entry('004.jpg'),
-            entry('005.jpg'),
-            entry('ComicInfo.xml'),
-            entry('__MACOSX/._001.jpg'),
-            entry('.hidden'),
-          ]),
-          isTrue);
+        heuristic.isComic([
+          entry('001.jpg'),
+          entry('002.jpg'),
+          entry('003.jpg'),
+          entry('004.jpg'),
+          entry('005.jpg'),
+          entry('ComicInfo.xml'),
+          entry('__MACOSX/._001.jpg'),
+          entry('.hidden'),
+        ]),
+        isTrue,
+      );
     });
   });
 
@@ -59,13 +69,17 @@ void main() {
     test('rejects absolute and parent traversal paths', () {
       const policy = ArchiveSafetyPolicy();
       expect(
-          () => policy.validate(
-              [(path: '/etc/passwd', compressedSize: 1, uncompressedSize: 1)]),
-          throwsException);
+        () => policy.validate([
+          (path: '/etc/passwd', compressedSize: 1, uncompressedSize: 1),
+        ]),
+        throwsException,
+      );
       expect(
-          () => policy.validate(
-              [(path: 'a/../secret', compressedSize: 1, uncompressedSize: 1)]),
-          throwsException);
+        () => policy.validate([
+          (path: 'a/../secret', compressedSize: 1, uncompressedSize: 1),
+        ]),
+        throwsException,
+      );
     });
 
     test('rejects dangerous expansion ratio', () {

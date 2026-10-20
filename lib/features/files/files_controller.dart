@@ -14,13 +14,14 @@ enum FileViewMode { list, grid }
 
 /// A storage volume shown on the Files home screen.
 class RootLocation {
-  const RootLocation(
-      {required this.entry,
-      required this.name,
-      this.primary = false,
-      this.removable = false,
-      this.totalBytes,
-      this.freeBytes});
+  const RootLocation({
+    required this.entry,
+    required this.name,
+    this.primary = false,
+    this.removable = false,
+    this.totalBytes,
+    this.freeBytes,
+  });
   final StorageEntry entry;
   final String name;
   final bool primary, removable;
@@ -50,21 +51,22 @@ class NavigationNode {
 }
 
 class FileManagerState {
-  const FileManagerState(
-      {this.loading = false,
-      this.showHidden = false,
-      this.hasAccess,
-      this.roots = const [],
-      this.quickFolders = const [],
-      this.favorites = const [],
-      this.path = const [],
-      this.entries = const [],
-      this.selected = const {},
-      this.query = '',
-      this.viewMode = FileViewMode.list,
-      this.sort = FileSort.name,
-      this.direction = SortDirection.ascending,
-      this.failure});
+  const FileManagerState({
+    this.loading = false,
+    this.showHidden = false,
+    this.hasAccess,
+    this.roots = const [],
+    this.quickFolders = const [],
+    this.favorites = const [],
+    this.path = const [],
+    this.entries = const [],
+    this.selected = const {},
+    this.query = '',
+    this.viewMode = FileViewMode.list,
+    this.sort = FileSort.name,
+    this.direction = SortDirection.ascending,
+    this.failure,
+  });
   final bool loading, showHidden;
 
   /// Null until checked; false shows the permission screen.
@@ -89,56 +91,60 @@ class FileManagerState {
         ? entries
         : entries.where((e) => !isHiddenFileName(e.displayName));
     if (query.trim().isNotEmpty) {
-      filtered = filtered.where((e) =>
-          e.displayName.toLowerCase().contains(query.trim().toLowerCase()));
+      filtered = filtered.where(
+        (e) => e.displayName.toLowerCase().contains(query.trim().toLowerCase()),
+      );
     }
     return sortEntries(filtered, sort, direction);
   }
 
-  FileManagerState copyWith(
-          {bool? loading,
-          bool? showHidden,
-          bool? hasAccess,
-          List<RootLocation>? roots,
-          List<QuickFolder>? quickFolders,
-          List<StorageEntry>? favorites,
-          List<NavigationNode>? path,
-          List<StorageEntry>? entries,
-          Set<Uri>? selected,
-          String? query,
-          FileViewMode? viewMode,
-          FileSort? sort,
-          SortDirection? direction,
-          AppFailure? failure,
-          bool clearFailure = false}) =>
-      FileManagerState(
-          loading: loading ?? this.loading,
-          showHidden: showHidden ?? this.showHidden,
-          hasAccess: hasAccess ?? this.hasAccess,
-          roots: roots ?? this.roots,
-          quickFolders: quickFolders ?? this.quickFolders,
-          favorites: favorites ?? this.favorites,
-          path: path ?? this.path,
-          entries: entries ?? this.entries,
-          selected: selected ?? this.selected,
-          query: query ?? this.query,
-          viewMode: viewMode ?? this.viewMode,
-          sort: sort ?? this.sort,
-          direction: direction ?? this.direction,
-          failure: clearFailure ? null : failure ?? this.failure);
+  FileManagerState copyWith({
+    bool? loading,
+    bool? showHidden,
+    bool? hasAccess,
+    List<RootLocation>? roots,
+    List<QuickFolder>? quickFolders,
+    List<StorageEntry>? favorites,
+    List<NavigationNode>? path,
+    List<StorageEntry>? entries,
+    Set<Uri>? selected,
+    String? query,
+    FileViewMode? viewMode,
+    FileSort? sort,
+    SortDirection? direction,
+    AppFailure? failure,
+    bool clearFailure = false,
+  }) => FileManagerState(
+    loading: loading ?? this.loading,
+    showHidden: showHidden ?? this.showHidden,
+    hasAccess: hasAccess ?? this.hasAccess,
+    roots: roots ?? this.roots,
+    quickFolders: quickFolders ?? this.quickFolders,
+    favorites: favorites ?? this.favorites,
+    path: path ?? this.path,
+    entries: entries ?? this.entries,
+    selected: selected ?? this.selected,
+    query: query ?? this.query,
+    viewMode: viewMode ?? this.viewMode,
+    sort: sort ?? this.sort,
+    direction: direction ?? this.direction,
+    failure: clearFailure ? null : failure ?? this.failure,
+  );
 }
 
 bool isHiddenFileName(String name) =>
     name.startsWith('.') && name != '.' && name != '..';
 final filesControllerProvider =
-    StateNotifierProvider<FilesController, FileManagerState>((ref) =>
-        FilesController(
-            ref.read(storageRepositoryProvider), ref.read(databaseProvider))
-          ..initialize());
+    StateNotifierProvider<FilesController, FileManagerState>(
+      (ref) => FilesController(
+        ref.read(storageRepositoryProvider),
+        ref.read(databaseProvider),
+      )..initialize(),
+    );
 
 class FilesController extends StateNotifier<FileManagerState> {
   FilesController(this.storage, this.database)
-      : super(const FileManagerState());
+    : super(const FileManagerState());
   final StorageRepository storage;
   final AppDatabase database;
 
@@ -150,13 +156,17 @@ class FilesController extends StateNotifier<FileManagerState> {
     final prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     state = state.copyWith(
-        showHidden: prefs.getBool(_hiddenKey) ?? false,
-        viewMode: FileViewMode.values
-            .byName(prefs.getString(_viewKey) ?? FileViewMode.list.name),
-        sort: FileSort.values
-            .byName(prefs.getString(_sortKey) ?? FileSort.name.name),
-        direction: SortDirection.values.byName(
-            prefs.getString(_directionKey) ?? SortDirection.ascending.name));
+      showHidden: prefs.getBool(_hiddenKey) ?? false,
+      viewMode: FileViewMode.values.byName(
+        prefs.getString(_viewKey) ?? FileViewMode.list.name,
+      ),
+      sort: FileSort.values.byName(
+        prefs.getString(_sortKey) ?? FileSort.name.name,
+      ),
+      direction: SortDirection.values.byName(
+        prefs.getString(_directionKey) ?? SortDirection.ascending.name,
+      ),
+    );
     await loadRoots();
   }
 
@@ -168,26 +178,29 @@ class FilesController extends StateNotifier<FileManagerState> {
       if (!mounted) return;
       if (!access) {
         state = state.copyWith(
-            loading: false,
-            hasAccess: false,
-            roots: [],
-            quickFolders: [],
-            favorites: []);
+          loading: false,
+          hasAccess: false,
+          roots: [],
+          quickFolders: [],
+          favorites: [],
+        );
         return;
       }
       final volumes = await storage.volumes();
       final roots = [
         for (final v in volumes)
           RootLocation(
-              entry: StorageEntry(
-                  uri: Uri.file(v.path),
-                  displayName: v.name,
-                  kind: StorageEntryKind.directory),
-              name: v.name,
-              primary: v.primary,
-              removable: v.removable,
-              totalBytes: v.totalBytes,
-              freeBytes: v.freeBytes)
+            entry: StorageEntry(
+              uri: Uri.file(v.path),
+              displayName: v.name,
+              kind: StorageEntryKind.directory,
+            ),
+            name: v.name,
+            primary: v.primary,
+            removable: v.removable,
+            totalBytes: v.totalBytes,
+            freeBytes: v.freeBytes,
+          ),
       ];
       final primary = volumes.where((v) => v.primary).firstOrNull;
       final quick = <QuickFolder>[];
@@ -206,11 +219,12 @@ class FilesController extends StateNotifier<FileManagerState> {
       }
       if (!mounted) return;
       state = state.copyWith(
-          loading: false,
-          hasAccess: true,
-          roots: roots,
-          quickFolders: quick,
-          favorites: favorites);
+        loading: false,
+        hasAccess: true,
+        roots: roots,
+        quickFolders: quick,
+        favorites: favorites,
+      );
     } catch (e) {
       if (!mounted) return;
       state = state.copyWith(loading: false, failure: mapFailure(e));
@@ -229,19 +243,27 @@ class FilesController extends StateNotifier<FileManagerState> {
 
   Future<void> toggleFavorite(StorageEntry folder) async {
     await database.setFavorite(
-        '${folder.uri}', folder.displayName, !state.isFavorite(folder.uri));
+      '${folder.uri}',
+      folder.displayName,
+      !state.isFavorite(folder.uri),
+    );
     if (!mounted) return;
     final favorites = state.isFavorite(folder.uri)
         ? state.favorites.where((e) => e.uri != folder.uri).toList()
-        : ([...state.favorites, folder]..sort((a, b) => a.displayName
-            .toLowerCase()
-            .compareTo(b.displayName.toLowerCase())));
+        : ([...state.favorites, folder]..sort(
+            (a, b) => a.displayName.toLowerCase().compareTo(
+              b.displayName.toLowerCase(),
+            ),
+          ));
     state = state.copyWith(favorites: favorites);
   }
 
   Future<void> openRoot(RootLocation root) async {
-    state = state
-        .copyWith(path: [NavigationNode(root.entry)], selected: {}, query: '');
+    state = state.copyWith(
+      path: [NavigationNode(root.entry)],
+      selected: {},
+      query: '',
+    );
     await refresh();
   }
 
@@ -249,23 +271,31 @@ class FilesController extends StateNotifier<FileManagerState> {
   Future<void> openDirectory(StorageEntry folder) async {
     final target = folder.uri.toFilePath();
     final root = state.roots
-        .where((r) =>
-            target == r.uri.toFilePath() ||
-            target.startsWith('${r.uri.toFilePath()}/'))
+        .where(
+          (r) =>
+              target == r.uri.toFilePath() ||
+              target.startsWith('${r.uri.toFilePath()}/'),
+        )
         .firstOrNull;
     final nodes = <NavigationNode>[];
     if (root != null) {
       nodes.add(NavigationNode(root.entry));
       var path = root.uri.toFilePath();
-      for (final segment in target
-          .substring(path.length)
-          .split('/')
-          .where((e) => e.isNotEmpty)) {
+      for (final segment
+          in target
+              .substring(path.length)
+              .split('/')
+              .where((e) => e.isNotEmpty)) {
         path = '$path/$segment';
-        nodes.add(NavigationNode(StorageEntry(
-            uri: Uri.file(path),
-            displayName: segment,
-            kind: StorageEntryKind.directory)));
+        nodes.add(
+          NavigationNode(
+            StorageEntry(
+              uri: Uri.file(path),
+              displayName: segment,
+              kind: StorageEntryKind.directory,
+            ),
+          ),
+        );
       }
     } else {
       nodes.add(NavigationNode(folder));
@@ -276,7 +306,10 @@ class FilesController extends StateNotifier<FileManagerState> {
 
   Future<void> openFolder(StorageEntry folder) async {
     state = state.copyWith(
-        path: [...state.path, NavigationNode(folder)], selected: {}, query: '');
+      path: [...state.path, NavigationNode(folder)],
+      selected: {},
+      query: '',
+    );
     await refresh();
   }
 
@@ -287,9 +320,10 @@ class FilesController extends StateNotifier<FileManagerState> {
     }
     if (state.path.length > 1) {
       state = state.copyWith(
-          path: state.path.sublist(0, state.path.length - 1),
-          selected: {},
-          query: '');
+        path: state.path.sublist(0, state.path.length - 1),
+        selected: {},
+        query: '',
+      );
       await refresh();
       return true;
     }
@@ -304,7 +338,10 @@ class FilesController extends StateNotifier<FileManagerState> {
   Future<void> goTo(int index) async {
     if (index < 0 || index >= state.path.length - 1) return;
     state = state.copyWith(
-        path: state.path.sublist(0, index + 1), selected: {}, query: '');
+      path: state.path.sublist(0, index + 1),
+      selected: {},
+      query: '',
+    );
     await refresh();
   }
 
@@ -317,7 +354,9 @@ class FilesController extends StateNotifier<FileManagerState> {
     state = state.copyWith(loading: true, clearFailure: true);
     try {
       final entries = await PerfTrace.measure(
-          'directory.listChildren', () => storage.list(current.uri));
+        'directory.listChildren',
+        () => storage.list(current.uri),
+      );
       if (!mounted) return;
       state = state.copyWith(loading: false, entries: entries, selected: {});
       assert(() {
@@ -341,8 +380,9 @@ class FilesController extends StateNotifier<FileManagerState> {
   }
 
   /// Selects only what the user can see (hidden files and search filter apply).
-  void selectAll() => state =
-      state.copyWith(selected: state.visibleEntries.map((e) => e.uri).toSet());
+  void selectAll() => state = state.copyWith(
+    selected: state.visibleEntries.map((e) => e.uri).toSet(),
+  );
   void clearSelection() => state = state.copyWith(selected: {});
 
   /// Selected entries that are currently visible; never acts on hidden ones.
@@ -362,14 +402,18 @@ class FilesController extends StateNotifier<FileManagerState> {
 
   Future<void> setViewMode(FileViewMode value) async {
     state = state.copyWith(viewMode: value);
-    await (await SharedPreferences.getInstance())
-        .setString(_viewKey, value.name);
+    await (await SharedPreferences.getInstance()).setString(
+      _viewKey,
+      value.name,
+    );
   }
 
   Future<void> setSort(FileSort value) async {
     state = state.copyWith(sort: value);
-    await (await SharedPreferences.getInstance())
-        .setString(_sortKey, value.name);
+    await (await SharedPreferences.getInstance()).setString(
+      _sortKey,
+      value.name,
+    );
   }
 
   Future<void> toggleDirection() async {
@@ -377,8 +421,10 @@ class FilesController extends StateNotifier<FileManagerState> {
         ? SortDirection.descending
         : SortDirection.ascending;
     state = state.copyWith(direction: value);
-    await (await SharedPreferences.getInstance())
-        .setString(_directionKey, value.name);
+    await (await SharedPreferences.getInstance()).setString(
+      _directionKey,
+      value.name,
+    );
   }
 
   Future<void> createFolder(String name) async {
@@ -386,8 +432,9 @@ class FilesController extends StateNotifier<FileManagerState> {
     if (error != null) throw StorageFailure(error);
     final current = state.current;
     if (current == null) throw const StorageFailure('Aucun dossier ouvert');
-    if (state.entries
-        .any((e) => e.displayName.toLowerCase() == name.trim().toLowerCase())) {
+    if (state.entries.any(
+      (e) => e.displayName.toLowerCase() == name.trim().toLowerCase(),
+    )) {
       throw const StorageFailure('Un élément porte déjà ce nom.');
     }
     await storage.createDirectory(current.uri, name.trim());
@@ -397,9 +444,11 @@ class FilesController extends StateNotifier<FileManagerState> {
   Future<void> rename(StorageEntry entry, String name) async {
     final error = validateEntryName(name);
     if (error != null) throw StorageFailure(error);
-    if (state.entries.any((e) =>
-        e.uri != entry.uri &&
-        e.displayName.toLowerCase() == name.trim().toLowerCase())) {
+    if (state.entries.any(
+      (e) =>
+          e.uri != entry.uri &&
+          e.displayName.toLowerCase() == name.trim().toLowerCase(),
+    )) {
       throw const StorageFailure('Un élément porte déjà ce nom.');
     }
     await storage.rename(entry.uri, name.trim());

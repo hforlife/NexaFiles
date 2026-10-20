@@ -2,7 +2,7 @@ import '../errors/app_failure.dart';
 import '../formats/detected_format.dart';
 import '../storage/content_source.dart';
 
-enum ReaderType { pdf, epub, comic, image, audio, video, text }
+enum ReaderType { pdf, epub, comic, image, audio, video, text, document }
 
 abstract interface class ReaderSession {
   ContentSource get source;
@@ -17,7 +17,7 @@ abstract interface class ReaderAdapter {
 
 class ReaderRegistry {
   ReaderRegistry([Iterable<ReaderAdapter> adapters = const []])
-      : _adapters = [...adapters];
+    : _adapters = [...adapters];
   final List<ReaderAdapter> _adapters;
   void register(ReaderAdapter adapter) => _adapters.add(adapter);
   ReaderAdapter? find(DetectedFormat format) {
@@ -29,8 +29,9 @@ class ReaderRegistry {
 
   ReaderAdapter resolve(DetectedFormat format) =>
       _adapters.cast<ReaderAdapter?>().firstWhere(
-          (a) => a!.supportedKinds.contains(format.content),
-          orElse: () => null) ??
+        (a) => a!.supportedKinds.contains(format.content),
+        orElse: () => null,
+      ) ??
       (throw const UnsupportedFormatFailure());
   Future<ReaderSession> open(ContentSource source, DetectedFormat format) =>
       resolve(format).open(source, format);

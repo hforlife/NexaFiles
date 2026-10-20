@@ -55,11 +55,16 @@ void main() {
     test('create, rename and refuse to overwrite', () async {
       final dir = await storage.createDirectory(Uri.file(root.path), 'new');
       expect(dir.kind, StorageEntryKind.directory);
-      final created =
-          await storage.createFile(dir.uri, 'a.txt', utf8.encode('hello'));
+      final created = await storage.createFile(
+        dir.uri,
+        'a.txt',
+        utf8.encode('hello'),
+      );
       expect(File(created.uri.toFilePath()).readAsStringSync(), 'hello');
-      await expectLater(storage.createFile(dir.uri, 'a.txt', utf8.encode('')),
-          throwsA(isA<StorageFailure>()));
+      await expectLater(
+        storage.createFile(dir.uri, 'a.txt', utf8.encode('')),
+        throwsA(isA<StorageFailure>()),
+      );
       final renamed = await storage.rename(created.uri, 'b.txt');
       expect(renamed.displayName, 'b.txt');
       expect(await names('new'), ['b.txt']);
@@ -94,8 +99,10 @@ void main() {
 
     test('reads only the requested prefix', () async {
       file('doc.pdf', '%PDF-1.7 rest of the file');
-      expect(utf8.decode(await storage.readPrefix(at('doc.pdf'), length: 8)),
-          '%PDF-1.7');
+      expect(
+        utf8.decode(await storage.readPrefix(at('doc.pdf'), length: 8)),
+        '%PDF-1.7',
+      );
     });
 
     test('content source uses the file in place, without copying', () async {
@@ -108,34 +115,52 @@ void main() {
   });
 
   group('FileOperationService', () {
-    Future<void> run(List<String> sources, String destination,
-            {required bool move, required ConflictPolicy policy}) async =>
-        FileOperationService(storage).transfer(
-            sources: [for (final s in sources) (await storage.get(at(s)))!],
-            destination: at(destination),
-            move: move,
-            conflict: policy).drain<void>();
+    Future<void> run(
+      List<String> sources,
+      String destination, {
+      required bool move,
+      required ConflictPolicy policy,
+    }) async => FileOperationService(storage)
+        .transfer(
+          sources: [for (final s in sources) (await storage.get(at(s)))!],
+          destination: at(destination),
+          move: move,
+          conflict: policy,
+        )
+        .drain<void>();
 
     test('moving a file into its own folder never deletes it', () async {
       file('dir/keep.txt', 'precious');
-      await run(['dir/keep.txt'], 'dir',
-          move: true, policy: ConflictPolicy.replace);
+      await run(
+        ['dir/keep.txt'],
+        'dir',
+        move: true,
+        policy: ConflictPolicy.replace,
+      );
       expect(File('${root.path}/dir/keep.txt').readAsStringSync(), 'precious');
       expect(await names('dir'), ['keep.txt']);
     });
 
     test('copying into the same folder makes a numbered duplicate', () async {
       file('dir/a.txt');
-      await run(['dir/a.txt'], 'dir',
-          move: false, policy: ConflictPolicy.replace);
+      await run(
+        ['dir/a.txt'],
+        'dir',
+        move: false,
+        policy: ConflictPolicy.replace,
+      );
       expect(await names('dir'), ['a (1).txt', 'a.txt']);
     });
 
     test('replace overwrites the existing target', () async {
       file('src/a.txt', 'new');
       file('dst/a.txt', 'old');
-      await run(['src/a.txt'], 'dst',
-          move: true, policy: ConflictPolicy.replace);
+      await run(
+        ['src/a.txt'],
+        'dst',
+        move: true,
+        policy: ConflictPolicy.replace,
+      );
       expect(File('${root.path}/dst/a.txt').readAsStringSync(), 'new');
       expect(await names('dst'), ['a.txt']);
       expect(File('${root.path}/src/a.txt').existsSync(), isFalse);
@@ -144,8 +169,12 @@ void main() {
     test('keep both renames the incoming folder', () async {
       file('src/photos/p.jpg');
       file('dst/photos/q.jpg');
-      await run(['src/photos'], 'dst',
-          move: false, policy: ConflictPolicy.keepBoth);
+      await run(
+        ['src/photos'],
+        'dst',
+        move: false,
+        policy: ConflictPolicy.keepBoth,
+      );
       expect(await names('dst'), ['photos', 'photos (1)']);
       expect(await names('dst/photos (1)'), ['p.jpg']);
     });
@@ -155,8 +184,10 @@ void main() {
     file('books/series/vol1.cbz', 'v1');
     final trash = TrashService(storage);
     final folder = (await storage.get(at('books/series')))!;
-    expect(await trash.moveToTrash(folder, at('books'), Uri.file(root.path)),
-        isTrue);
+    expect(
+      await trash.moveToTrash(folder, at('books'), Uri.file(root.path)),
+      isTrue,
+    );
     expect(Directory('${root.path}/books/series').existsSync(), isFalse);
     final items = await trash.list();
     expect(items.single.name, 'series');
@@ -174,40 +205,63 @@ void main() {
 
   test('v5 migration drops unreachable SAF rows and keeps file rows', () async {
     const saf = 'content://tree/old.epub', local = 'file:///sdcard/new.epub';
-    final db = AppDatabase(NativeDatabase.memory(setup: (raw) {
-      raw.execute('CREATE TABLE library_items (id TEXT PRIMARY KEY, '
-          'source_uri TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, '
-          'detected_format TEXT NOT NULL, mime_type TEXT, size INTEGER, '
-          'modified_at INTEGER, cover_cache_key TEXT, last_opened_at INTEGER, '
-          'added_at INTEGER NOT NULL DEFAULT 0, title TEXT, author TEXT, '
-          'favorite INTEGER NOT NULL DEFAULT 0, reading_status TEXT, '
-          'unavailable INTEGER NOT NULL DEFAULT 0, scan_root_uri TEXT)');
-      for (final table in ['reading_progress', 'recent_items']) {
-        raw.execute('CREATE TABLE $table (item_id TEXT PRIMARY KEY, '
-            'locator_json TEXT, fraction REAL, opened_at INTEGER, '
-            'updated_at INTEGER)');
-      }
-      raw.execute('CREATE TABLE bookmarks (id TEXT PRIMARY KEY, item_id TEXT)');
-      raw.execute('CREATE TABLE collection_items (collection_id TEXT, '
-          'item_id TEXT)');
-      raw.execute('CREATE TABLE reader_preferences (item_id TEXT PRIMARY KEY)');
-      raw.execute('CREATE TABLE library_roots (uri TEXT PRIMARY KEY, '
-          'display_name TEXT NOT NULL, added_at INTEGER NOT NULL)');
-      for (final table in ['favorite_folders', 'library_scan_roots']) {
-        raw.execute('CREATE TABLE $table (uri TEXT PRIMARY KEY, '
-            'display_name TEXT NOT NULL, added_at INTEGER NOT NULL, '
-            'last_scan_at INTEGER)');
-      }
-      for (final uri in [saf, local]) {
-        raw.execute("INSERT INTO library_items(id,source_uri,display_name,"
-            "detected_format) VALUES('$uri','$uri','book','epub')");
-        raw.execute(
-            "INSERT INTO reading_progress(item_id,fraction) VALUES('$uri',.5)");
-        raw.execute("INSERT INTO favorite_folders VALUES('$uri','d',0,NULL)");
-      }
-      raw.execute("INSERT INTO library_roots VALUES('$saf','old',0)");
-      raw.userVersion = 4;
-    }));
+    final db = AppDatabase(
+      NativeDatabase.memory(
+        setup: (raw) {
+          raw.execute(
+            'CREATE TABLE library_items (id TEXT PRIMARY KEY, '
+            'source_uri TEXT NOT NULL UNIQUE, display_name TEXT NOT NULL, '
+            'detected_format TEXT NOT NULL, mime_type TEXT, size INTEGER, '
+            'modified_at INTEGER, cover_cache_key TEXT, last_opened_at INTEGER, '
+            'added_at INTEGER NOT NULL DEFAULT 0, title TEXT, author TEXT, '
+            'favorite INTEGER NOT NULL DEFAULT 0, reading_status TEXT, '
+            'unavailable INTEGER NOT NULL DEFAULT 0, scan_root_uri TEXT)',
+          );
+          for (final table in ['reading_progress', 'recent_items']) {
+            raw.execute(
+              'CREATE TABLE $table (item_id TEXT PRIMARY KEY, '
+              'locator_json TEXT, fraction REAL, opened_at INTEGER, '
+              'updated_at INTEGER)',
+            );
+          }
+          raw.execute(
+            'CREATE TABLE bookmarks (id TEXT PRIMARY KEY, item_id TEXT)',
+          );
+          raw.execute(
+            'CREATE TABLE collection_items (collection_id TEXT, '
+            'item_id TEXT)',
+          );
+          raw.execute(
+            'CREATE TABLE reader_preferences (item_id TEXT PRIMARY KEY)',
+          );
+          raw.execute(
+            'CREATE TABLE library_roots (uri TEXT PRIMARY KEY, '
+            'display_name TEXT NOT NULL, added_at INTEGER NOT NULL)',
+          );
+          for (final table in ['favorite_folders', 'library_scan_roots']) {
+            raw.execute(
+              'CREATE TABLE $table (uri TEXT PRIMARY KEY, '
+              'display_name TEXT NOT NULL, added_at INTEGER NOT NULL, '
+              'last_scan_at INTEGER)',
+            );
+          }
+          for (final uri in [saf, local]) {
+            raw.execute(
+              "INSERT INTO library_items(id,source_uri,display_name,"
+              "detected_format) VALUES('$uri','$uri','book','epub')",
+            );
+            raw.execute(
+              "INSERT INTO reading_progress(item_id,fraction) VALUES('$uri',.5)",
+            );
+            raw.execute(
+              "INSERT INTO favorite_folders VALUES('$uri','d',0,NULL)",
+            );
+          }
+          raw.execute("INSERT INTO library_roots VALUES('$saf','old',0)");
+          raw.userVersion = 4;
+        },
+      ),
+    );
     addTearDown(db.close);
     Future<List<String>> column(String sql) async =>
         (await db.customSelect(sql).get())
@@ -217,8 +271,8 @@ void main() {
     expect(await column('SELECT item_id FROM reading_progress'), [local]);
     expect((await db.favoriteFolders()).map((e) => e.uri), [local]);
     expect(
-        await column(
-            "SELECT name FROM sqlite_master WHERE name='library_roots'"),
-        isEmpty);
+      await column("SELECT name FROM sqlite_master WHERE name='library_roots'"),
+      isEmpty,
+    );
   });
 }

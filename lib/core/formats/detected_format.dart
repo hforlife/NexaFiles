@@ -14,15 +14,16 @@ enum ContentKind {
   officePresentation,
   apk,
   archive,
-  unknown
+  unknown,
 }
 
 class DetectedFormat {
-  const DetectedFormat(
-      {required this.container,
-      required this.content,
-      required this.confidence,
-      this.evidence = const []});
+  const DetectedFormat({
+    required this.container,
+    required this.content,
+    required this.confidence,
+    this.evidence = const [],
+  });
   final ContainerFormat container;
   final ContentKind content;
   final double confidence;

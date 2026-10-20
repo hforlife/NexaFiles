@@ -52,26 +52,19 @@ enum FileCategory {
   final IconData icon;
   final Color color;
 
-  static FileCategory fromExtension(String? extension) =>
-      switch (extension?.toLowerCase()) {
-        'jpg' || 'jpeg' || 'png' || 'gif' || 'webp' || 'heic' => image,
-        'mp4' || 'mkv' || 'mov' || 'avi' || 'webm' || 'm4v' || '3gp' => video,
-        'mp3' || 'wav' || 'aac' || 'flac' || 'm4a' || 'ogg' => audio,
-        'pdf' => pdf,
-        'doc' ||
-        'docx' ||
-        'txt' ||
-        'xls' ||
-        'xlsx' ||
-        'ppt' ||
-        'pptx' =>
-          document,
-        'epub' || 'mobi' || 'cbz' || 'cbr' || 'cb7' => reading,
-        'zip' || 'rar' || '7z' || 'tar' || 'gz' => archive,
-        'apk' => apk,
-        _ => other,
-      };
+  static FileCategory fromExtension(String? extension) => switch (extension
+      ?.toLowerCase()) {
+    'jpg' || 'jpeg' || 'png' || 'gif' || 'webp' || 'heic' => image,
+    'mp4' || 'mkv' || 'mov' || 'avi' || 'webm' || 'm4v' || '3gp' => video,
+    'mp3' || 'wav' || 'aac' || 'flac' || 'm4a' || 'ogg' => audio,
+    'pdf' => pdf,
+    'doc' || 'docx' || 'txt' || 'xls' || 'xlsx' || 'ppt' || 'pptx' => document,
+    'epub' || 'mobi' || 'cbz' || 'cbr' || 'cb7' => reading,
+    'zip' || 'rar' || '7z' || 'tar' || 'gz' => archive,
+    'apk' => apk,
+    _ => other,
+  };
 
   Color softBackground(Brightness brightness) =>
-      color.withOpacity(brightness == Brightness.light ? 0.14 : 0.22);
+      color.withValues(alpha: brightness == Brightness.light ? 0.14 : 0.22);
 }

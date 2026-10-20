@@ -11,19 +11,20 @@ class NexaFilesApp extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final settings = ref.watch(settingsProvider);
     return MaterialApp(
-        title: 'NexaFiles',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.light(),
-        darkTheme: AppTheme.dark(),
-        themeMode: settings.themeMode,
-        locale: settings.locale,
-        supportedLocales: const [Locale('fr'), Locale('en')],
-        localizationsDelegates: const [
-          GlobalMaterialLocalizations.delegate,
-          GlobalWidgetsLocalizations.delegate,
-          GlobalCupertinoLocalizations.delegate
-        ],
-        initialRoute: AppRoutes.files,
-        onGenerateRoute: AppRouter.onGenerateRoute);
+      title: 'NexaFiles',
+      debugShowCheckedModeBanner: false,
+      theme: AppTheme.light(),
+      darkTheme: AppTheme.dark(),
+      themeMode: settings.themeMode,
+      locale: settings.locale,
+      supportedLocales: const [Locale('fr'), Locale('en')],
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      initialRoute: AppRoutes.files,
+      onGenerateRoute: AppRouter.onGenerateRoute,
+    );
   }
 }

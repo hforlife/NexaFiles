@@ -10,20 +10,24 @@ import '../comics/comic_reader_adapter.dart';
 import '../readers/document_adapters.dart';
 import '../readers/media_adapters.dart';
 
-final storageRepositoryProvider =
-    Provider<StorageRepository>((_) => LocalStorageRepository());
-final archiveRegistryProvider =
-    Provider<ArchiveRegistry>((_) => ArchiveRegistry([
-          ZipArchiveAdapter(),
-          NativeArchiveAdapter(ContainerFormat.rar),
-          NativeArchiveAdapter(ContainerFormat.sevenZip)
-        ]));
-final readerRegistryProvider =
-    Provider<ReaderRegistry>((ref) => ReaderRegistry([
-          ComicReaderAdapter(ref.read(archiveRegistryProvider)),
-          PdfReaderAdapter(),
-          const EpubReaderAdapter(),
-          const TextReaderAdapter(),
-          const ImageReaderAdapter(),
-          const MediaReaderAdapter()
-        ]));
+final storageRepositoryProvider = Provider<StorageRepository>(
+  (_) => LocalStorageRepository(),
+);
+final archiveRegistryProvider = Provider<ArchiveRegistry>(
+  (_) => ArchiveRegistry([
+    ZipArchiveAdapter(),
+    NativeArchiveAdapter(ContainerFormat.rar),
+    NativeArchiveAdapter(ContainerFormat.sevenZip),
+  ]),
+);
+final readerRegistryProvider = Provider<ReaderRegistry>(
+  (ref) => ReaderRegistry([
+    ComicReaderAdapter(ref.read(archiveRegistryProvider)),
+    PdfReaderAdapter(),
+    const EpubReaderAdapter(),
+    const TextReaderAdapter(),
+    const ImageReaderAdapter(),
+    const MediaReaderAdapter(),
+    const DocxReaderAdapter(),
+  ]),
+);

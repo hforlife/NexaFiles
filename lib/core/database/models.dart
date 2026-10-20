@@ -12,7 +12,11 @@ sealed class ReadingLocator {
       case 'comic':
         return ComicLocator(map['page'] as int);
       case 'epub':
-        return EpubLocator(map['cfi'] as String, map['chapter'] as int?);
+        return EpubLocator(
+          map['cfi'] as String,
+          map['chapter'] as int?,
+          (map['progress'] as num?)?.toDouble(),
+        );
       default:
         throw const FormatException('Unknown locator');
     }
@@ -34,10 +38,17 @@ class ComicLocator extends ReadingLocator {
 }
 
 class EpubLocator extends ReadingLocator {
-  const EpubLocator(this.cfi, [this.chapter]);
+  const EpubLocator(this.cfi, [this.chapter, this.progress]);
   final String cfi;
   final int? chapter;
+
+  /// Position inside the chapter, 0 (start) to 1; absent in older saves.
+  final double? progress;
   @override
-  Map<String, Object?> toJson() =>
-      {'type': 'epub', 'cfi': cfi, 'chapter': chapter};
+  Map<String, Object?> toJson() => {
+    'type': 'epub',
+    'cfi': cfi,
+    'chapter': chapter,
+    if (progress != null) 'progress': progress,
+  };
 }

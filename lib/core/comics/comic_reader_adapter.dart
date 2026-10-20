@@ -13,7 +13,9 @@ class ComicReaderAdapter implements ReaderAdapter {
   Set<ContentKind> get supportedKinds => const {ContentKind.comic};
   @override
   Future<ReaderSession> open(
-      ContentSource source, DetectedFormat format) async {
+    ContentSource source,
+    DetectedFormat format,
+  ) async {
     final archive = await archives.open(source, format);
     final entries = await archive.listEntries();
     if (!const ComicHeuristic().isComic(entries) &&

@@ -2,9 +2,11 @@ import 'dart:typed_data';
 import 'content_source.dart';
 
 class MemoryContentSource implements ContentSource {
-  MemoryContentSource(
-      {required this.id, required this.displayName, required List<int> bytes})
-      : bytes = Uint8List.fromList(bytes);
+  MemoryContentSource({
+    required this.id,
+    required this.displayName,
+    required this.bytes,
+  });
   @override
   final String id;
   @override

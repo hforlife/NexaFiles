@@ -48,6 +48,10 @@ class StorageBridge(private val activity: Activity, messenger: BinaryMessenger) 
                 "hasAllFilesAccess" -> result.success(hasAllFilesAccess())
                 "requestAllFilesAccess" -> { requestAllFilesAccess(); result.success(null) }
                 "volumes" -> background(result) { volumes() }
+                "categoryStats" -> background(result) { categoryStats() }
+                "categoryFiles" -> background(result) {
+                    categoryFiles(call.argument<String>("category")!!, call.argument<Int>("limit") ?: 2000)
+                }
                 "thumbnail" -> background(result) { thumbnail(File(call.argument<String>("path")!!)) }
                 "scan" -> {
                     val paths = call.argument<List<String>>("paths").orEmpty()
@@ -102,6 +106,54 @@ class StorageBridge(private val activity: Activity, messenger: BinaryMessenger) 
                 "removable" to Environment.isExternalStorageRemovable(dir),
                 "total" to stats?.totalBytes, "free" to stats?.availableBytes)
         }
+    }
+
+    /** MediaStore selection per home-screen category; hidden folders (trash, thumbnails) excluded. */
+    private fun categorySelection(category: String): Pair<String, Array<String>> {
+        fun extensions(vararg ext: String) =
+            ext.joinToString(" OR ", "(", ")") { "${MediaStore.Files.FileColumns.DATA} LIKE ?" } to ext.map { "%.$it" }.toTypedArray()
+        val (where, args) = when (category) {
+            "images" -> "${MediaStore.Files.FileColumns.MEDIA_TYPE}=${MediaStore.Files.FileColumns.MEDIA_TYPE_IMAGE}" to emptyArray<String>()
+            "videos" -> "${MediaStore.Files.FileColumns.MEDIA_TYPE}=${MediaStore.Files.FileColumns.MEDIA_TYPE_VIDEO}" to emptyArray<String>()
+            "audio" -> "${MediaStore.Files.FileColumns.MEDIA_TYPE}=${MediaStore.Files.FileColumns.MEDIA_TYPE_AUDIO}" to emptyArray<String>()
+            "documents" -> extensions("pdf", "doc", "docx", "odt", "rtf", "txt", "md", "xls", "xlsx", "ods", "csv", "ppt", "pptx", "odp")
+            "books" -> extensions("epub", "cbz", "cbr", "cb7")
+            "archives" -> extensions("zip", "rar", "7z", "tar", "gz")
+            "apps" -> extensions("apk")
+            else -> error("Catégorie inconnue")
+        }
+        return "($where) AND ${MediaStore.Files.FileColumns.DATA} NOT LIKE ?" to (args + "%/.%")
+    }
+
+    private val categories = listOf("images", "videos", "audio", "documents", "books", "archives", "apps")
+
+    private fun categoryStats(): Map<String, Map<String, Long>> = categories.associateWith { category ->
+        val (where, args) = categorySelection(category)
+        var count = 0L
+        var bytes = 0L
+        activity.contentResolver.query(MediaStore.Files.getContentUri("external"), arrayOf(MediaStore.Files.FileColumns.SIZE), where, args, null)?.use { c ->
+            while (c.moveToNext()) { count++; bytes += c.getLong(0) }
+        }
+        mapOf("count" to count, "bytes" to bytes)
+    }
+
+    private fun categoryFiles(category: String, limit: Int): List<Map<String, Any?>> {
+        val (where, args) = categorySelection(category)
+        val projection = arrayOf(
+            MediaStore.Files.FileColumns.DATA, MediaStore.Files.FileColumns.SIZE,
+            MediaStore.Files.FileColumns.DATE_MODIFIED,
+        )
+        val rows = mutableListOf<Map<String, Any?>>()
+        activity.contentResolver.query(
+            MediaStore.Files.getContentUri("external"), projection, where, args,
+            "${MediaStore.Files.FileColumns.DATE_MODIFIED} DESC",
+        )?.use { c ->
+            while (c.moveToNext() && rows.size < limit) {
+                val path = c.getString(0) ?: continue
+                rows.add(mapOf("path" to path, "size" to c.getLong(1), "modified" to c.getLong(2) * 1000))
+            }
+        }
+        return rows
     }
 
     private fun mimeOf(file: File): String? =

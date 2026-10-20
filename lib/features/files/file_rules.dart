@@ -34,7 +34,10 @@ String keepBothName(String original, Set<String> existing) {
 }
 
 List<StorageEntry> sortEntries(
-    Iterable<StorageEntry> values, FileSort sort, SortDirection direction) {
+  Iterable<StorageEntry> values,
+  FileSort sort,
+  SortDirection direction,
+) {
   final list = values.toList();
   int compare(StorageEntry a, StorageEntry b) {
     if (a.kind != b.kind) return a.kind == StorageEntryKind.directory ? -1 : 1;

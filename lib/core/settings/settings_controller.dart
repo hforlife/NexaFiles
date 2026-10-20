@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 final settingsProvider = ChangeNotifierProvider<SettingsController>(
-    (_) => throw StateError('Settings not initialized'));
+  (_) => throw StateError('Settings not initialized'),
+);
 
 class SettingsController extends ChangeNotifier {
   SettingsController._(this._preferences, this._themeMode, this._locale);
@@ -16,10 +17,15 @@ class SettingsController extends ChangeNotifier {
   static Future<SettingsController> load() async {
     final prefs = await SharedPreferences.getInstance();
     final name = prefs.getString(_themeKey) ?? ThemeMode.system.name;
-    final mode = ThemeMode.values
-        .firstWhere((v) => v.name == name, orElse: () => ThemeMode.system);
+    final mode = ThemeMode.values.firstWhere(
+      (v) => v.name == name,
+      orElse: () => ThemeMode.system,
+    );
     return SettingsController._(
-        prefs, mode, Locale(prefs.getString(_localeKey) ?? 'fr'));
+      prefs,
+      mode,
+      Locale(prefs.getString(_localeKey) ?? 'fr'),
+    );
   }
 
   Future<void> setThemeMode(ThemeMode value) async {

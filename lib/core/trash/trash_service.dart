@@ -4,31 +4,33 @@ import '../storage/storage_entry.dart';
 import '../storage/storage_repository.dart';
 
 class TrashItem {
-  const TrashItem(
-      {required this.id,
-      required this.name,
-      required this.originalParent,
-      required this.trashUri,
-      required this.deletedAt,
-      this.size});
+  const TrashItem({
+    required this.id,
+    required this.name,
+    required this.originalParent,
+    required this.trashUri,
+    required this.deletedAt,
+    this.size,
+  });
   final String id, name, originalParent, trashUri;
   final DateTime deletedAt;
   final int? size;
   Map<String, Object?> toJson() => {
-        'id': id,
-        'name': name,
-        'originalParent': originalParent,
-        'trashUri': trashUri,
-        'deletedAt': deletedAt.millisecondsSinceEpoch,
-        'size': size
-      };
+    'id': id,
+    'name': name,
+    'originalParent': originalParent,
+    'trashUri': trashUri,
+    'deletedAt': deletedAt.millisecondsSinceEpoch,
+    'size': size,
+  };
   factory TrashItem.fromJson(Map<String, dynamic> j) => TrashItem(
-      id: j['id'],
-      name: j['name'],
-      originalParent: j['originalParent'],
-      trashUri: j['trashUri'],
-      deletedAt: DateTime.fromMillisecondsSinceEpoch(j['deletedAt']),
-      size: j['size']);
+    id: j['id'],
+    name: j['name'],
+    originalParent: j['originalParent'],
+    trashUri: j['trashUri'],
+    deletedAt: DateTime.fromMillisecondsSinceEpoch(j['deletedAt']),
+    size: j['size'],
+  );
 }
 
 class TrashService {
@@ -45,28 +47,41 @@ class TrashService {
 
   Future<void> _save(List<TrashItem> items) async =>
       (await SharedPreferences.getInstance()).setStringList(
-          key, items.map((e) => jsonEncode(e.toJson())).toList());
+        key,
+        items.map((e) => jsonEncode(e.toJson())).toList(),
+      );
   Future<bool> moveToTrash(
-      StorageEntry entry, Uri originalParent, Uri root) async {
+    StorageEntry entry,
+    Uri originalParent,
+    Uri root,
+  ) async {
     try {
       final children = await storage.list(root);
       var trash = children
-          .where((e) =>
-              e.kind == StorageEntryKind.directory &&
-              e.displayName == '.NexaTrash')
+          .where(
+            (e) =>
+                e.kind == StorageEntryKind.directory &&
+                e.displayName == '.NexaTrash',
+          )
           .firstOrNull;
       trash ??= await storage.createDirectory(root, '.NexaTrash');
-      final moved = await storage.move(entry.uri, trash.uri,
-          targetName:
-              '${DateTime.now().microsecondsSinceEpoch}_${entry.displayName}');
+      final moved = await storage.move(
+        entry.uri,
+        trash.uri,
+        targetName:
+            '${DateTime.now().microsecondsSinceEpoch}_${entry.displayName}',
+      );
       final items = await list();
-      items.add(TrashItem(
+      items.add(
+        TrashItem(
           id: '${DateTime.now().microsecondsSinceEpoch}',
           name: entry.displayName,
           originalParent: '$originalParent',
           trashUri: '${moved.uri}',
           deletedAt: DateTime.now(),
-          size: entry.size));
+          size: entry.size,
+        ),
+      );
       await _save(items);
       return true;
     } catch (_) {
@@ -76,9 +91,9 @@ class TrashService {
 
   Future<void> restore(TrashItem item) async {
     final target = Uri.parse(item.originalParent),
-        names = (await storage.list(target))
-            .map((e) => e.displayName.toLowerCase())
-            .toSet();
+        names = (await storage.list(
+          target,
+        )).map((e) => e.displayName.toLowerCase()).toSet();
     var name = item.name, index = 2;
     while (names.contains(name.toLowerCase())) {
       final dot = item.name.lastIndexOf('.');

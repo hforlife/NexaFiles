@@ -10,9 +10,13 @@ abstract final class AppRouter {
   static Route<dynamic> onGenerateRoute(RouteSettings settings) {
     if (settings.name == AppRoutes.settings) {
       return MaterialPageRoute(
-          settings: settings, builder: (_) => const SettingsScreen());
+        settings: settings,
+        builder: (_) => const SettingsScreen(),
+      );
     }
     return MaterialPageRoute(
-        settings: settings, builder: (_) => const MainShell());
+      settings: settings,
+      builder: (_) => const MainShell(),
+    );
   }
 }

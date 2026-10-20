@@ -3,21 +3,23 @@ import '../storage/content_source.dart';
 import 'archive_safety_policy.dart';
 
 class ArchiveCapabilities {
-  const ArchiveCapabilities(
-      {this.canList = true,
-      this.canReadEntry = true,
-      this.canExtract = true,
-      this.canCreate = false,
-      this.canRandomAccess = false});
+  const ArchiveCapabilities({
+    this.canList = true,
+    this.canReadEntry = true,
+    this.canExtract = true,
+    this.canCreate = false,
+    this.canRandomAccess = false,
+  });
   final bool canList, canReadEntry, canExtract, canCreate, canRandomAccess;
 }
 
 class ArchiveEntry {
-  const ArchiveEntry(
-      {required this.path,
-      required this.compressedSize,
-      required this.uncompressedSize,
-      required this.isDirectory});
+  const ArchiveEntry({
+    required this.path,
+    required this.compressedSize,
+    required this.uncompressedSize,
+    required this.isDirectory,
+  });
   final String path;
   final int compressedSize, uncompressedSize;
   final bool isDirectory;
@@ -36,12 +38,14 @@ abstract interface class ArchiveAdapter {
   ArchiveCapabilities get capabilities;
   bool supports(DetectedFormat format);
   Future<ArchiveSession> open(
-      ContentSource source, ArchiveSafetyPolicy safetyPolicy);
+    ContentSource source,
+    ArchiveSafetyPolicy safetyPolicy,
+  );
 }
 
 class ArchiveRegistry {
   ArchiveRegistry([Iterable<ArchiveAdapter> adapters = const []])
-      : _adapters = [...adapters];
+    : _adapters = [...adapters];
   final List<ArchiveAdapter> _adapters;
   void register(ArchiveAdapter adapter) => _adapters.add(adapter);
   ArchiveAdapter? find(DetectedFormat format) {
@@ -51,8 +55,11 @@ class ArchiveRegistry {
     return null;
   }
 
-  Future<ArchiveSession> open(ContentSource source, DetectedFormat format,
-      {ArchiveSafetyPolicy safetyPolicy = const ArchiveSafetyPolicy()}) async {
+  Future<ArchiveSession> open(
+    ContentSource source,
+    DetectedFormat format, {
+    ArchiveSafetyPolicy safetyPolicy = const ArchiveSafetyPolicy(),
+  }) async {
     final adapter = find(format);
     if (adapter == null) throw StateError('Archive non prise en charge');
     return adapter.open(source, safetyPolicy);

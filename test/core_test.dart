@@ -12,28 +12,33 @@ void main() {
   });
   test('magic wins over extension', () {
     expect(
-        FormatDetector().detect(
-            prefix: [0x25, 0x50, 0x44, 0x46, 0x2d],
-            fileName: 'fake.cbz').content,
-        ContentKind.pdf);
+      FormatDetector()
+          .detect(prefix: [0x25, 0x50, 0x44, 0x46, 0x2d], fileName: 'fake.cbz')
+          .content,
+      ContentKind.pdf,
+    );
   });
   test('ZIP image structure detects comic', () {
     final r = FormatDetector().detect(
-        prefix: [0x50, 0x4b, 0x03, 0x04],
-        fileName: 'book.zip',
-        archiveEntries: ['1.jpg', '2.png', '3.webp', '4.jpg', '5.jpg']);
+      prefix: [0x50, 0x4b, 0x03, 0x04],
+      fileName: 'book.zip',
+      archiveEntries: ['1.jpg', '2.png', '3.webp', '4.jpg', '5.jpg'],
+    );
     expect(r.content, ContentKind.comic);
     expect(r.container, ContainerFormat.zip);
   });
   test('safety rejects traversal', () {
     expect(
-        () => const ArchiveSafetyPolicy()
-            .validate([(path: '../x', compressedSize: 1, uncompressedSize: 1)]),
-        throwsException);
+      () => const ArchiveSafetyPolicy().validate([
+        (path: '../x', compressedSize: 1, uncompressedSize: 1),
+      ]),
+      throwsException,
+    );
   });
   test('locator round trip', () {
-    final value =
-        ReadingLocator.decode(const EpubLocator('epubcfi(/6/2)', 8).encode());
+    final value = ReadingLocator.decode(
+      const EpubLocator('epubcfi(/6/2)', 8).encode(),
+    );
     expect(value, isA<EpubLocator>());
     expect((value as EpubLocator).chapter, 8);
   });

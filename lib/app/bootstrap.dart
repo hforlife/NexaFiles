@@ -9,8 +9,13 @@ Future<void> bootstrap() async {
   final settings = await SettingsController.load();
   final database = AppDatabase();
   await database.customSelect('SELECT 1').getSingle();
-  runApp(ProviderScope(overrides: [
-    settingsProvider.overrideWith((_) => settings),
-    databaseProvider.overrideWithValue(database)
-  ], child: const NexaFilesApp()));
+  runApp(
+    ProviderScope(
+      overrides: [
+        settingsProvider.overrideWith((_) => settings),
+        databaseProvider.overrideWithValue(database),
+      ],
+      child: const NexaFilesApp(),
+    ),
+  );
 }

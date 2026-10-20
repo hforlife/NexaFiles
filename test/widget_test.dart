@@ -17,10 +17,15 @@ Future<void> _pumpApp(WidgetTester tester) async {
     await db.customSelect('SELECT 1').get();
     return db;
   }))!;
-  await tester.pumpWidget(ProviderScope(overrides: [
-    settingsProvider.overrideWith((_) => settings),
-    databaseProvider.overrideWithValue(database),
-  ], child: const NexaFilesApp()));
+  await tester.pumpWidget(
+    ProviderScope(
+      overrides: [
+        settingsProvider.overrideWith((_) => settings),
+        databaseProvider.overrideWithValue(database),
+      ],
+      child: const NexaFilesApp(),
+    ),
+  );
   await tester.pump();
 }
 
@@ -34,8 +39,9 @@ void main() {
     expect(find.byIcon(Icons.folder), findsOneWidget);
   });
 
-  testWidgets('back on another tab returns to Files in the same shell',
-      (tester) async {
+  testWidgets('back on another tab returns to Files in the same shell', (
+    tester,
+  ) async {
     await _pumpApp(tester);
     await tester.tap(find.byIcon(Icons.local_library_outlined));
     await tester.pump();

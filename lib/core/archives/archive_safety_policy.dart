@@ -1,18 +1,20 @@
 import '../errors/app_failure.dart';
 
 class ArchiveSafetyPolicy {
-  const ArchiveSafetyPolicy(
-      {this.maxEntries = 10000,
-      this.maxTotalBytes = 2147483648,
-      this.maxEntryBytes = 536870912,
-      this.maxCompressionRatio = 200,
-      this.maxDepth = 32});
+  const ArchiveSafetyPolicy({
+    this.maxEntries = 10000,
+    this.maxTotalBytes = 2147483648,
+    this.maxEntryBytes = 536870912,
+    this.maxCompressionRatio = 200,
+    this.maxDepth = 32,
+  });
   final int maxEntries, maxTotalBytes, maxEntryBytes, maxDepth;
   final double maxCompressionRatio;
   void validate(
-      Iterable<({String path, int compressedSize, int uncompressedSize})>
-          entries,
-      {int? availableBytes}) {
+    Iterable<({String path, int compressedSize, int uncompressedSize})>
+    entries, {
+    int? availableBytes,
+  }) {
     final values = entries.toList();
     if (values.length > maxEntries) {
       throw const ArchiveFailure('Archive contenant trop de fichiers');
