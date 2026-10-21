@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:path/path.dart' as p;
@@ -14,6 +15,8 @@ import '../../core/readers/media_adapters.dart';
 import '../../core/storage/storage_entry.dart';
 import '../archives/archive_browser_screen.dart';
 import '../files/files_controller.dart';
+import '../player/audio_player_controller.dart';
+import '../player/audio_player_screen.dart';
 import '../recents/recents_screen.dart' show recentOpenEpochProvider;
 import 'comic_cover_service.dart';
 import 'comic_reader_screen.dart';
@@ -153,6 +156,7 @@ Future<void> openFile(
         database: db,
         itemId: id,
         title: name,
+        file: entry.uri.scheme == 'file' ? File(entry.uri.toFilePath()) : null,
       );
     case ImageReaderSession s:
       final images = siblingsWhere(
@@ -166,17 +170,29 @@ Future<void> openFile(
         initialIndex: images.indexWhere((e) => e.uri == entry.uri),
       );
     case MediaReaderSession s when s.kind == ContentKind.audio:
+      // Audio goes to the app-wide player: it keeps playing when the
+      // screen is minimised to the mini player.
+      await s.dispose();
       final songs = siblingsWhere(
         (e) => (e.mimeType ?? '').startsWith('audio/'),
       );
-      screen = AudioReaderScreen(
+      unawaited(
+        ref.read(audioPlayerProvider).play([
+          for (final e in songs) MediaTrack('${e.uri}', e.displayName),
+        ], songs.indexWhere((e) => e.uri == entry.uri).clamp(0, songs.length)),
+      );
+      if (context.mounted) await openAudioPlayer(context);
+      return;
+    case MediaReaderSession s:
+      unawaited(ref.read(audioPlayerProvider).pause());
+      screen = VideoReaderScreen(
         session: s,
         title: name,
-        tracks: [for (final e in songs) MediaTrack('${e.uri}', e.displayName)],
-        initialIndex: songs.indexWhere((e) => e.uri == entry.uri),
+        onOpenExternal: () => storage.openExternal(
+          entry.uri,
+          mimeType: entry.mimeType ?? 'video/*',
+        ),
       );
-    case MediaReaderSession s:
-      screen = VideoReaderScreen(session: s, title: name);
     default:
       await session.dispose();
       throw StateError('Lecteur indisponible');

@@ -7,6 +7,9 @@ import '../../core/comics/comic_page_source.dart';
 import '../../core/comics/comic_reader_adapter.dart';
 import '../../core/database/app_database.dart';
 import '../../core/database/models.dart';
+import 'reader_kit.dart';
+
+export 'reader_kit.dart' show ComicTapLayout;
 
 enum ComicReadingMode { single, vertical, doublePage }
 
@@ -28,18 +31,37 @@ int steppedComicPage({
 
 enum ComicTapAction { previous, next, toggleControls }
 
-/// Tap zones: outer 30 % turn pages, the centre toggles the controls.
-/// In right-to-left (manga) reading the left edge goes forward.
+/// Maps a tap to an action according to the chosen [layout].
+/// In right-to-left (manga) reading the zones are mirrored horizontally,
+/// so the left edge goes forward.
 ComicTapAction comicTapAction({
   required double dx,
   required double width,
   required ComicReadingDirection direction,
+  double dy = 0,
+  double height = 0,
+  ComicTapLayout layout = ComicTapLayout.edges,
 }) {
-  final rtl = direction == ComicReadingDirection.rightToLeft;
-  final position = width <= 0 ? .5 : dx / width;
-  if (position < .3) return rtl ? ComicTapAction.next : ComicTapAction.previous;
-  if (position > .7) return rtl ? ComicTapAction.previous : ComicTapAction.next;
-  return ComicTapAction.toggleControls;
+  var x = width <= 0 ? .5 : (dx / width).clamp(0.0, 1.0);
+  final y = height <= 0 ? .5 : (dy / height).clamp(0.0, 1.0);
+  if (direction == ComicReadingDirection.rightToLeft) x = 1 - x;
+  switch (layout) {
+    case ComicTapLayout.off:
+      return ComicTapAction.toggleControls;
+    case ComicTapLayout.edges:
+      if (x < .3) return ComicTapAction.previous;
+      if (x > .7) return ComicTapAction.next;
+      return ComicTapAction.toggleControls;
+    case ComicTapLayout.lShape:
+      final centre = x >= 1 / 3 && x <= 2 / 3 && y >= 1 / 3 && y <= 2 / 3;
+      if (centre) return ComicTapAction.toggleControls;
+      return x < 1 / 3 || y < 1 / 3
+          ? ComicTapAction.previous
+          : ComicTapAction.next;
+    case ComicTapLayout.kindle:
+      if (y < .18) return ComicTapAction.toggleControls;
+      return x < .3 ? ComicTapAction.previous : ComicTapAction.next;
+  }
 }
 
 /// Pages are decoded close to screen resolution (1.5x keeps zoom sharp)
@@ -86,6 +108,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   ComicReadingMode mode = ComicReadingMode.single;
   ComicReadingDirection direction = ComicReadingDirection.leftToRight;
   ComicFitMode fit = ComicFitMode.width;
+  ReaderPrefs prefs = const ReaderPrefs();
   PageController? pageController;
   ScrollController? scrollController;
   Timer? saveTimer;
@@ -100,6 +123,8 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     count = await widget.session.pages.pageCount;
     final prefs = await widget.database.readerPreferences(widget.itemId),
         global = await SharedPreferences.getInstance();
+    this.prefs = await ReaderPrefs.load();
+    unawaited(applyReaderOrientation(this.prefs.orientation));
     mode = ComicReadingMode.values.byName(
       prefs?.mode ??
           global.getString('comic.default.mode') ??
@@ -186,10 +211,14 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
       setState(() => controls = !controls);
       return;
     }
+    final size = MediaQuery.sizeOf(context);
     final action = comicTapAction(
       dx: details.localPosition.dx,
-      width: MediaQuery.sizeOf(context).width,
+      dy: details.localPosition.dy,
+      width: size.width,
+      height: size.height,
       direction: direction,
+      layout: prefs.tapLayout,
     );
     if (action == ComicTapAction.toggleControls) {
       setState(() => controls = !controls);
@@ -226,6 +255,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     scrollController?.dispose();
     widget.session.dispose();
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+    releaseReaderOrientation();
     super.dispose();
   }
 
@@ -275,6 +305,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
         onNotification: (_) => false,
         child: ListView.builder(
           controller: scrollController,
+          cacheExtent: MediaQuery.sizeOf(context).height * 2,
           itemCount: count,
           itemBuilder: (_, i) => SizedBox(
             height: MediaQuery.sizeOf(context).height,
@@ -286,6 +317,8 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     return PageView.builder(
       controller: pageController,
       itemCount: _viewCount,
+      // Builds the neighbouring pages ahead of time: turning is instant.
+      allowImplicitScrolling: true,
       reverse: direction == ComicReadingDirection.rightToLeft,
       // While zoomed, horizontal drags pan the page instead of turning it.
       physics: zoomed ? const NeverScrollableScrollPhysics() : null,
@@ -302,6 +335,7 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     source: widget.session.pages,
     index: index,
     fit: fit,
+    doubleTapZoom: prefs.doubleTapZoom,
     onZoomChanged: _zoomChanged,
   );
 
@@ -318,126 +352,143 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     );
   }
 
-  Widget _controls() => IgnorePointer(
-    ignoring: !controls,
-    child: AnimatedOpacity(
-      opacity: controls ? 1 : 0,
-      duration: const Duration(milliseconds: 180),
-      child: Stack(
-        children: [
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: SafeArea(
-              child: Container(
-                color: Colors.black87,
-                child: ListTile(
-                  leading: IconButton(
-                    onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                  ),
-                  title: Text(
-                    widget.title,
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                  trailing: IconButton(
-                    onPressed: _options,
-                    icon: const Icon(Icons.tune, color: Colors.white),
-                  ),
-                ),
+  Widget _controls() => Stack(
+    children: [
+      Positioned(
+        left: 0,
+        right: 0,
+        top: 0,
+        child: ReaderFade(
+          visible: controls,
+          child: ReaderTopBar(
+            title: widget.title,
+            subtitle:
+                '${_modeName(mode)} · ${direction == ComicReadingDirection.rightToLeft ? 'Droite → gauche' : 'Gauche → droite'}',
+            actions: [
+              IconButton(
+                tooltip: 'Ajouter un signet',
+                onPressed: _addBookmark,
+                icon: const Icon(Icons.bookmark_add_outlined),
               ),
-            ),
-          ),
-          Positioned(
-            left: 16,
-            right: 16,
-            bottom: 20,
-            child: SafeArea(
-              child: Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: Colors.black87,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Slider(
-                      value: count <= 1 ? 0 : page.toDouble(),
-                      min: 0,
-                      max: (count - 1).clamp(0, count).toDouble(),
-                      onChanged: (v) => _jump(v.round()),
-                    ),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        IconButton.filledTonal(
-                          tooltip: 'Page précédente',
-                          onPressed: page > 0
-                              ? () => _jump(
-                                  steppedComicPage(
-                                    current: page,
-                                    pageCount: count,
-                                    mode: mode,
-                                    direction: -1,
-                                  ),
-                                )
-                              : null,
-                          icon: const Icon(Icons.remove),
-                        ),
-                        SizedBox(
-                          width: 120,
-                          child: Text(
-                            '${page + 1} / $count',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ),
-                        IconButton.filledTonal(
-                          tooltip: 'Page suivante',
-                          onPressed: page + 1 < count
-                              ? () => _jump(
-                                  steppedComicPage(
-                                    current: page,
-                                    pageCount: count,
-                                    mode: mode,
-                                    direction: 1,
-                                  ),
-                                )
-                              : null,
-                          icon: const Icon(Icons.add),
-                        ),
-                      ],
-                    ),
-                  ],
-                ),
+              IconButton(
+                tooltip: 'Signets',
+                onPressed: _bookmarks,
+                icon: const Icon(Icons.bookmarks_outlined),
               ),
-            ),
+              IconButton(
+                tooltip: 'Options de lecture',
+                onPressed: _options,
+                icon: const Icon(Icons.tune_rounded),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
+      Positioned(
+        left: 0,
+        right: 0,
+        bottom: 0,
+        child: ReaderFade(
+          visible: controls,
+          child: SafeArea(
+            top: false,
+            minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: ReaderGlass(
+              padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
+              child: Row(
+                children: [
+                  IconButton(
+                    tooltip: 'Page précédente',
+                    color: ReaderColors.text,
+                    onPressed: page > 0 ? () => _step(-1) : null,
+                    icon: const Icon(Icons.chevron_left_rounded),
+                  ),
+                  Expanded(
+                    // The slider follows the reading direction.
+                    child: Directionality(
+                      textDirection:
+                          direction == ComicReadingDirection.rightToLeft
+                          ? TextDirection.rtl
+                          : TextDirection.ltr,
+                      child: Slider(
+                        value: count <= 1 ? 0 : page.toDouble(),
+                        max: (count - 1).clamp(1, count).toDouble(),
+                        onChanged: count > 1 ? (v) => _jump(v.round()) : null,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Page suivante',
+                    color: ReaderColors.text,
+                    onPressed: page + 1 < count ? () => _step(1) : null,
+                    icon: const Icon(Icons.chevron_right_rounded),
+                  ),
+                  ReaderPageChip(label: '${page + 1} / $count'),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    ],
+  );
+
+  void _step(int delta) => _jump(
+    steppedComicPage(
+      current: page,
+      pageCount: count,
+      mode: mode,
+      direction: delta,
     ),
   );
+
+  Future<void> _addBookmark() async {
+    await widget.database.addBookmark(
+      widget.itemId,
+      ComicLocator(page).encode(),
+      label: 'Page ${page + 1}',
+    );
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Signet ajouté à la page ${page + 1}')),
+    );
+  }
+
+  Future<void> _bookmarks() async {
+    final locator = await showBookmarksSheet(
+      context,
+      database: widget.database,
+      itemId: widget.itemId,
+      onAdd: _addBookmark,
+    );
+    if (locator == null) return;
+    final value = ReadingLocator.decode(locator);
+    if (value is ComicLocator) {
+      _jump(value.page.clamp(0, (count - 1).clamp(0, count)).toInt());
+    }
+  }
+
+  void _setPrefs(ReaderPrefs value) {
+    final rotate = value.orientation != prefs.orientation;
+    setState(() => prefs = value);
+    if (rotate) applyReaderOrientation(value.orientation);
+    value.save();
+  }
+
   void _jump(int target) {
     zoomed = false;
     _setPage(target);
     if (mode == ComicReadingMode.vertical) {
       scrollController?.animateTo(
         target * MediaQuery.sizeOf(context).height,
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
       );
     } else {
       pageController?.animateToPage(
         _viewIndexForPage(target),
-        duration: const Duration(milliseconds: 250),
-        curve: Curves.easeOut,
+        duration: const Duration(milliseconds: 220),
+        curve: Curves.easeOutCubic,
       );
     }
   }
@@ -445,57 +496,112 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
   void _options() {
     showModalBottomSheet(
       context: context,
-      // Rebuilds the sheet so radios and switch reflect each change at once.
+      isScrollControlled: true,
+      // Rebuilds the sheet so each control reflects changes at once.
       builder: (context) => StatefulBuilder(
-        builder: (context, setSheet) => SafeArea(
-          child: ListView(
-            shrinkWrap: true,
-            children: [
-              const ListTile(title: Text('Mode de lecture')),
-              RadioGroup<ComicReadingMode>(
-                groupValue: mode,
-                onChanged: (v) => setSheet(() => _update(mode: v)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final value in ComicReadingMode.values)
-                      RadioListTile<ComicReadingMode>(
-                        value: value,
-                        title: Text(_modeName(value)),
-                      ),
-                  ],
-                ),
-              ),
-              const Divider(),
-              SwitchListTile(
-                value: direction == ComicReadingDirection.rightToLeft,
-                title: const Text('Lecture droite → gauche'),
-                onChanged: (v) => setSheet(
-                  () => _update(
-                    direction: v
-                        ? ComicReadingDirection.rightToLeft
-                        : ComicReadingDirection.leftToRight,
+        builder: (context, setSheet) {
+          void apply(VoidCallback change) => setSheet(change);
+          return SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Options de lecture',
+                    style: Theme.of(context).textTheme.titleLarge,
                   ),
-                ),
+                  const SheetLabel('Mode'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ComicReadingMode>(
+                      showSelectedIcon: false,
+                      segments: [
+                        for (final v in ComicReadingMode.values)
+                          ButtonSegment(
+                            value: v,
+                            icon: Icon(switch (v) {
+                              ComicReadingMode.single =>
+                                Icons.crop_portrait_rounded,
+                              ComicReadingMode.vertical =>
+                                Icons.view_day_rounded,
+                              ComicReadingMode.doublePage =>
+                                Icons.menu_book_rounded,
+                            }),
+                            label: Text(_modeShort(v)),
+                          ),
+                      ],
+                      selected: {mode},
+                      onSelectionChanged: (v) =>
+                          apply(() => _update(mode: v.first)),
+                    ),
+                  ),
+                  const SheetLabel('Sens de lecture'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ComicReadingDirection>(
+                      showSelectedIcon: false,
+                      segments: const [
+                        ButtonSegment(
+                          value: ComicReadingDirection.leftToRight,
+                          icon: Icon(Icons.arrow_forward_rounded),
+                          label: Text('BD / Comics'),
+                        ),
+                        ButtonSegment(
+                          value: ComicReadingDirection.rightToLeft,
+                          icon: Icon(Icons.arrow_back_rounded),
+                          label: Text('Manga'),
+                        ),
+                      ],
+                      selected: {direction},
+                      onSelectionChanged: (v) =>
+                          apply(() => _update(direction: v.first)),
+                    ),
+                  ),
+                  const SheetLabel('Ajustement'),
+                  SizedBox(
+                    width: double.infinity,
+                    child: SegmentedButton<ComicFitMode>(
+                      showSelectedIcon: false,
+                      segments: [
+                        for (final v in ComicFitMode.values)
+                          ButtonSegment(value: v, label: Text(_fitName(v))),
+                      ],
+                      selected: {fit},
+                      onSelectionChanged: (v) =>
+                          apply(() => _update(fit: v.first)),
+                    ),
+                  ),
+                  const SheetLabel('Zones de changement de page'),
+                  TapLayoutPicker(
+                    value: prefs.tapLayout,
+                    onChanged: (v) =>
+                        apply(() => _setPrefs(prefs.copyWith(tapLayout: v))),
+                  ),
+                  const SizedBox(height: 8),
+                  SwitchListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4),
+                    value: prefs.doubleTapZoom,
+                    title: const Text('Zoom au double tap'),
+                    subtitle: const Text(
+                      'Ajoute un court délai aux taps simples. Le pincement '
+                      'fonctionne toujours.',
+                    ),
+                    onChanged: (v) => apply(
+                      () => _setPrefs(prefs.copyWith(doubleTapZoom: v)),
+                    ),
+                  ),
+                  const SheetLabel('Orientation de l’écran'),
+                  OrientationPicker(
+                    value: prefs.orientation,
+                    onChanged: (v) =>
+                        apply(() => _setPrefs(prefs.copyWith(orientation: v))),
+                  ),
+                ],
               ),
-              const ListTile(title: Text('Ajustement')),
-              RadioGroup<ComicFitMode>(
-                groupValue: fit,
-                onChanged: (v) => setSheet(() => _update(fit: v)),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    for (final value in ComicFitMode.values)
-                      RadioListTile<ComicFitMode>(
-                        value: value,
-                        title: Text(_fitName(value)),
-                      ),
-                  ],
-                ),
-              ),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -534,10 +640,15 @@ class _ComicReaderScreenState extends State<ComicReaderScreen> {
     ComicReadingMode.vertical => 'Défilement vertical',
     ComicReadingMode.doublePage => 'Double page',
   };
+  String _modeShort(ComicReadingMode value) => switch (value) {
+    ComicReadingMode.single => 'Page',
+    ComicReadingMode.vertical => 'Vertical',
+    ComicReadingMode.doublePage => 'Double',
+  };
   String _fitName(ComicFitMode value) => switch (value) {
-    ComicFitMode.width => 'Ajuster largeur',
-    ComicFitMode.height => 'Ajuster hauteur',
-    ComicFitMode.free => 'Original / libre',
+    ComicFitMode.width => 'Largeur',
+    ComicFitMode.height => 'Hauteur',
+    ComicFitMode.free => 'Libre',
   };
 }
 
@@ -546,11 +657,13 @@ class _Page extends StatelessWidget {
     required this.source,
     required this.index,
     required this.fit,
+    required this.doubleTapZoom,
     required this.onZoomChanged,
   });
   final ComicPageSource source;
   final int index;
   final ComicFitMode fit;
+  final bool doubleTapZoom;
   final ValueChanged<bool> onZoomChanged;
   @override
   Widget build(BuildContext context) => FutureBuilder<ComicPage>(
@@ -566,11 +679,14 @@ class _Page extends StatelessWidget {
         );
       }
       if (!snapshot.hasData) {
-        return const Center(child: CircularProgressIndicator());
+        return const Center(
+          child: CircularProgressIndicator(color: Colors.white38),
+        );
       }
       return _ZoomComicImage(
         bytes: snapshot.data!.bytes,
         fit: fit,
+        doubleTapZoom: doubleTapZoom,
         onZoomChanged: onZoomChanged,
       );
     },
@@ -581,10 +697,12 @@ class _ZoomComicImage extends StatefulWidget {
   const _ZoomComicImage({
     required this.bytes,
     required this.fit,
+    required this.doubleTapZoom,
     required this.onZoomChanged,
   });
   final Uint8List bytes;
   final ComicFitMode fit;
+  final bool doubleTapZoom;
   final ValueChanged<bool> onZoomChanged;
   @override
   State<_ZoomComicImage> createState() => _ZoomComicImageState();
@@ -630,8 +748,12 @@ class _ZoomComicImageState extends State<_ZoomComicImage> {
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) => GestureDetector(
-      onDoubleTapDown: (d) => _doubleTapAt = d.localPosition,
-      onDoubleTap: _toggleZoom,
+      // Registered only when enabled: a double-tap recognizer makes every
+      // single tap wait for the double-tap timeout before turning the page.
+      onDoubleTapDown: widget.doubleTapZoom
+          ? (d) => _doubleTapAt = d.localPosition
+          : null,
+      onDoubleTap: widget.doubleTapZoom ? _toggleZoom : null,
       child: InteractiveViewer(
         transformationController: controller,
         minScale: 1,

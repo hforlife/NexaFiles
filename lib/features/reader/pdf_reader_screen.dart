@@ -1,9 +1,12 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:pdfrx/pdfrx.dart';
+import '../../app/theme/design_tokens.dart';
 import '../../core/database/app_database.dart';
 import '../../core/database/models.dart';
 import '../../core/readers/pdf_adapter.dart';
+import '../../shared/widgets/text_prompt.dart';
+import 'reader_kit.dart';
 
 /// PDF reader on pdfrx: continuous scroll, pinch zoom re-rendered sharp,
 /// text search with highlights and text selection.
@@ -23,8 +26,12 @@ class PdfReaderScreen extends StatefulWidget {
 }
 
 class _PdfReaderScreenState extends State<PdfReaderScreen> {
+  static const _background = Color(0xff1c1d21);
   final controller = PdfViewerController();
-  late final searcher = PdfTextSearcher(controller)..addListener(_refresh);
+
+  /// Created once the viewer is ready: pdfrx 2 reads the controller's
+  /// document in the constructor, which throws before the viewer is laid out.
+  PdfTextSearcher? searcher;
   late final documentRef = PdfDocumentRefDirect(
     widget.session.document,
     autoDispose: false, // the session owns the document
@@ -35,6 +42,7 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   int? initialPage;
   int page = 0;
   bool controls = true, searching = false;
+  ReaderPrefs prefs = const ReaderPrefs();
   Timer? saveTimer;
 
   int get pageCount => widget.session.pageCount;
@@ -56,11 +64,21 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
         restored = locator.page.clamp(0, pageCount - 1);
       }
     } catch (_) {}
+    prefs = await ReaderPrefs.load();
+    unawaited(applyReaderOrientation(prefs.orientation));
     if (mounted) setState(() => initialPage = page = restored);
   }
 
   void _refresh() {
     if (mounted) setState(() {});
+  }
+
+  void _onReady(PdfDocument document, PdfViewerController controller) {
+    if (searcher != null) return;
+    // Rebuild so the search button, disabled until now, becomes active.
+    setState(() {
+      searcher = PdfTextSearcher(controller)..addListener(_refresh);
+    });
   }
 
   void _changed(int value) {
@@ -80,10 +98,11 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   void dispose() {
     saveTimer?.cancel();
     _save();
-    searcher.removeListener(_refresh);
-    searcher.dispose();
+    searcher?.removeListener(_refresh);
+    searcher?.dispose();
     searchInput.dispose();
     widget.session.dispose();
+    releaseReaderOrientation();
     super.dispose();
   }
 
@@ -95,129 +114,186 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   }
 
   void _closeSearch() {
-    searcher.resetTextSearch();
+    searcher?.resetTextSearch();
     searchInput.clear();
     setState(() => searching = false);
   }
 
-  void _addBookmark() {
-    widget.database.addBookmark(
+  Future<void> _addBookmark() async {
+    await widget.database.addBookmark(
       widget.itemId,
       PdfLocator(page).encode(),
       label: 'Page ${page + 1}',
     );
-    ScaffoldMessenger.of(
-      context,
-    ).showSnackBar(const SnackBar(content: Text('Signet ajouté')));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Signet ajouté à la page ${page + 1}')),
+    );
   }
+
+  Future<void> _bookmarks() async {
+    final locator = await showBookmarksSheet(
+      context,
+      database: widget.database,
+      itemId: widget.itemId,
+      onAdd: _addBookmark,
+    );
+    if (locator == null) return;
+    final value = ReadingLocator.decode(locator);
+    if (value is PdfLocator) _jump(value.page);
+  }
+
+  Future<void> _options() => showModalBottomSheet<void>(
+    context: context,
+    builder: (c) => StatefulBuilder(
+      builder: (c, setSheet) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Options de lecture',
+                style: Theme.of(c).textTheme.titleLarge,
+              ),
+              const SheetLabel('Orientation de l’écran'),
+              OrientationPicker(
+                value: prefs.orientation,
+                onChanged: (v) {
+                  setSheet(() => prefs = prefs.copyWith(orientation: v));
+                  applyReaderOrientation(v);
+                  prefs.save();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 
   Future<void> _askPage() async {
-    final input = TextEditingController(text: '${page + 1}');
-    final value = await showDialog<int>(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Aller à la page'),
-        content: TextField(
-          controller: input,
-          autofocus: true,
-          keyboardType: TextInputType.number,
-          decoration: InputDecoration(helperText: '1 – $pageCount'),
-          onSubmitted: (v) => Navigator.pop(c, int.tryParse(v)),
+    final value = await showTextPrompt(
+      context,
+      title: 'Aller à la page',
+      initial: '${page + 1}',
+      hint: '1 – $pageCount',
+      confirm: 'Aller',
+      keyboardType: TextInputType.number,
+    );
+    final number = int.tryParse(value?.trim() ?? '');
+    if (number != null) _jump(number - 1);
+  }
+
+  Widget _searchBar() {
+    final s = searcher;
+    final matches = s?.matches.length ?? 0, current = s?.currentIndex;
+    return SafeArea(
+      bottom: false,
+      minimum: const EdgeInsets.fromLTRB(12, 8, 12, 0),
+      child: ReaderGlass(
+        radius: AppRadius.pill,
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: IconTheme(
+          data: const IconThemeData(color: ReaderColors.text),
+          child: Row(
+            children: [
+              IconButton(
+                tooltip: 'Fermer la recherche',
+                onPressed: _closeSearch,
+                icon: const Icon(Icons.close_rounded),
+              ),
+              Expanded(
+                child: TextField(
+                  controller: searchInput,
+                  autofocus: true,
+                  textInputAction: TextInputAction.search,
+                  style: const TextStyle(color: ReaderColors.text),
+                  cursorColor: ReaderColors.text,
+                  decoration: const InputDecoration(
+                    hintText: 'Rechercher dans le PDF',
+                    hintStyle: TextStyle(color: ReaderColors.muted),
+                    border: InputBorder.none,
+                    enabledBorder: InputBorder.none,
+                    focusedBorder: InputBorder.none,
+                    filled: false,
+                    isDense: true,
+                  ),
+                  onSubmitted: (v) {
+                    if (v.trim().isNotEmpty) s?.startTextSearch(v.trim());
+                  },
+                ),
+              ),
+              if (s?.isSearching ?? false)
+                const Padding(
+                  padding: EdgeInsets.all(12),
+                  child: SizedBox.square(
+                    dimension: 18,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      color: ReaderColors.text,
+                    ),
+                  ),
+                )
+              else if (searchInput.text.isNotEmpty)
+                Text(
+                  matches == 0 ? 'Aucun' : '${(current ?? 0) + 1}/$matches',
+                  style: const TextStyle(color: ReaderColors.muted),
+                ),
+              IconButton(
+                tooltip: 'Résultat précédent',
+                onPressed: matches > 0 ? s!.goToPrevMatch : null,
+                icon: const Icon(Icons.keyboard_arrow_up_rounded),
+              ),
+              IconButton(
+                tooltip: 'Résultat suivant',
+                onPressed: matches > 0 ? s!.goToNextMatch : null,
+                icon: const Icon(Icons.keyboard_arrow_down_rounded),
+              ),
+            ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(c),
-            child: const Text('Annuler'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(c, int.tryParse(input.text)),
-            child: const Text('Aller'),
-          ),
-        ],
       ),
     );
-    input.dispose();
-    if (value != null) _jump(value - 1);
   }
 
-  PreferredSizeWidget _appBar() {
-    if (searching) {
-      final matches = searcher.matches.length, current = searcher.currentIndex;
-      return AppBar(
-        leading: IconButton(
-          tooltip: 'Fermer la recherche',
-          onPressed: _closeSearch,
-          icon: const Icon(Icons.close),
-        ),
-        title: TextField(
-          controller: searchInput,
-          autofocus: true,
-          textInputAction: TextInputAction.search,
-          decoration: const InputDecoration(
-            hintText: 'Rechercher dans le PDF',
-            border: InputBorder.none,
-            filled: false,
-          ),
-          onSubmitted: (v) {
-            if (v.trim().isNotEmpty) searcher.startTextSearch(v.trim());
-          },
-        ),
-        actions: [
-          if (searcher.isSearching)
-            const Padding(
-              padding: EdgeInsets.all(14),
-              child: SizedBox.square(
-                dimension: 20,
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            )
-          else if (searchInput.text.isNotEmpty)
-            Center(
-              child: Text(
-                matches == 0 ? 'Aucun' : '${(current ?? 0) + 1}/$matches',
-              ),
-            ),
-          IconButton(
-            tooltip: 'Résultat précédent',
-            onPressed: matches > 0 ? searcher.goToPrevMatch : null,
-            icon: const Icon(Icons.keyboard_arrow_up),
-          ),
-          IconButton(
-            tooltip: 'Résultat suivant',
-            onPressed: matches > 0 ? searcher.goToNextMatch : null,
-            icon: const Icon(Icons.keyboard_arrow_down),
-          ),
-        ],
-      );
-    }
-    return AppBar(
-      title: Text(widget.title, maxLines: 1, overflow: TextOverflow.ellipsis),
-      actions: [
-        IconButton(
-          tooltip: 'Rechercher',
-          onPressed: () => setState(() => searching = true),
-          icon: const Icon(Icons.search),
-        ),
-        IconButton(
-          tooltip: 'Ajouter un signet',
-          onPressed: _addBookmark,
-          icon: const Icon(Icons.bookmark_add_outlined),
-        ),
-      ],
-    );
-  }
+  Widget _topBar() => ReaderTopBar(
+    title: widget.title,
+    subtitle: 'PDF · $pageCount pages',
+    actions: [
+      IconButton(
+        tooltip: 'Rechercher',
+        onPressed: searcher == null
+            ? null
+            : () => setState(() => searching = true),
+        icon: const Icon(Icons.search_rounded),
+      ),
+      IconButton(
+        tooltip: 'Signets',
+        onPressed: _bookmarks,
+        icon: const Icon(Icons.bookmarks_outlined),
+      ),
+      IconButton(
+        tooltip: 'Options de lecture',
+        onPressed: _options,
+        icon: const Icon(Icons.tune_rounded),
+      ),
+    ],
+  );
 
   Widget _bottomBar() => SafeArea(
-    child: Container(
-      color: Colors.black87,
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+    top: false,
+    minimum: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+    child: ReaderGlass(
+      padding: const EdgeInsets.fromLTRB(4, 4, 8, 4),
       child: Row(
         children: [
           IconButton(
             tooltip: 'Page précédente',
             onPressed: page > 0 ? () => _jump(page - 1) : null,
-            color: Colors.white,
-            icon: const Icon(Icons.chevron_left),
+            color: ReaderColors.text,
+            icon: const Icon(Icons.chevron_left_rounded),
           ),
           Expanded(
             child: Slider(
@@ -226,22 +302,13 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
               onChanged: pageCount > 1 ? (v) => _jump(v.round()) : null,
             ),
           ),
-          TextButton(
-            onPressed: _askPage,
-            child: Text(
-              '${page + 1} / $pageCount',
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-          ),
           IconButton(
             tooltip: 'Page suivante',
             onPressed: page + 1 < pageCount ? () => _jump(page + 1) : null,
-            color: Colors.white,
-            icon: const Icon(Icons.chevron_right),
+            color: ReaderColors.text,
+            icon: const Icon(Icons.chevron_right_rounded),
           ),
+          ReaderPageChip(label: '${page + 1} / $pageCount', onTap: _askPage),
         ],
       ),
     ),
@@ -251,49 +318,55 @@ class _PdfReaderScreenState extends State<PdfReaderScreen> {
   Widget build(BuildContext context) {
     final start = initialPage;
     return Scaffold(
-      backgroundColor: const Color(0xff202124),
-      appBar: controls || searching ? _appBar() : null,
+      backgroundColor: _background,
       body: start == null
           ? const Center(child: CircularProgressIndicator())
-          : PdfViewer(
-              documentRef,
-              controller: controller,
-              initialPageNumber: start + 1,
-              params: PdfViewerParams(
-                backgroundColor: const Color(0xff202124),
-                maxScale: 8,
-                pagePaintCallbacks: [searcher.pageTextMatchPaintCallback],
-                onPageChanged: (number) {
-                  if (number != null) _changed(number - 1);
-                },
-                onGeneralTap: (context, controller, details) {
-                  if (details.type != PdfViewerGeneralTapType.tap) return false;
-                  setState(() => controls = !controls);
-                  return true;
-                },
-                viewerOverlayBuilder: (context, size, handleLinkTap) => [
-                  PdfViewerScrollThumb(
+          : Stack(
+              children: [
+                Positioned.fill(
+                  child: PdfViewer(
+                    documentRef,
                     controller: controller,
-                    orientation: ScrollbarOrientation.right,
-                    thumbSize: const Size(48, 28),
-                    thumbBuilder:
-                        (context, thumbSize, pageNumber, controller) =>
-                            Container(
-                              decoration: BoxDecoration(
-                                color: Colors.black87,
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              alignment: Alignment.center,
-                              child: Text(
-                                '${pageNumber ?? ''}',
-                                style: const TextStyle(color: Colors.white),
-                              ),
-                            ),
+                    initialPageNumber: start + 1,
+                    params: PdfViewerParams(
+                      backgroundColor: _background,
+                      margin: 10,
+                      maxScale: 8,
+                      onViewerReady: _onReady,
+                      pagePaintCallbacks: [
+                        (canvas, rect, page) => searcher
+                            ?.pageTextMatchPaintCallback(canvas, rect, page),
+                      ],
+                      onPageChanged: (number) {
+                        if (number != null) _changed(number - 1);
+                      },
+                      onGeneralTap: (context, controller, details) {
+                        if (details.type != PdfViewerGeneralTapType.tap) {
+                          return false;
+                        }
+                        setState(() => controls = !controls);
+                        return true;
+                      },
+                    ),
                   ),
-                ],
-              ),
+                ),
+                Positioned(
+                  left: 0,
+                  right: 0,
+                  top: 0,
+                  child: searching
+                      ? _searchBar()
+                      : ReaderFade(visible: controls, child: _topBar()),
+                ),
+                if (!searching)
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    bottom: 0,
+                    child: ReaderFade(visible: controls, child: _bottomBar()),
+                  ),
+              ],
             ),
-      bottomNavigationBar: controls && !searching ? _bottomBar() : null,
     );
   }
 }

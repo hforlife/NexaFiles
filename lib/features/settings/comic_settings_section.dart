@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../reader/comic_reader_screen.dart';
+import '../../shared/widgets/nexa_ui.dart';
 
 class ComicSettingsSection extends StatefulWidget {
   const ComicSettingsSection({super.key});
@@ -118,11 +119,20 @@ class _ComicSettingsSectionState extends State<ComicSettingsSection> {
 
   @override
   Widget build(BuildContext context) => ListTile(
-    leading: const Icon(Icons.auto_stories_outlined),
-    title: const Text('Lecture Manga / BD'),
-    subtitle: Text(
-      '${mode.name} • ${direction == ComicReadingDirection.rightToLeft ? 'RTL' : 'LTR'} • ${fit.name}',
+    leading: IconBubble(
+      icon: Icons.auto_stories_rounded,
+      color: Theme.of(context).colorScheme.primary,
+      size: 42,
     ),
+    title: const Text('Mangas et BD par défaut'),
+    subtitle: Text(
+      '${switch (mode) {
+        ComicReadingMode.single => 'Page unique',
+        ComicReadingMode.vertical => 'Vertical',
+        ComicReadingMode.doublePage => 'Double page',
+      }} · ${direction == ComicReadingDirection.rightToLeft ? 'Manga (droite → gauche)' : 'Gauche → droite'}',
+    ),
+    trailing: const Icon(Icons.chevron_right_rounded),
     onTap: _choose,
   );
 }

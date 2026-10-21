@@ -262,6 +262,8 @@ class AppDatabase extends GeneratedDatabase {
       DateTime.now().millisecondsSinceEpoch,
     ],
   );
+  Future<void> deleteBookmark(String id) =>
+      customStatement('DELETE FROM bookmarks WHERE id=?', [id]);
   Future<List<BookmarkRecord>> bookmarks(String itemId) async =>
       (await customSelect(
             'SELECT id,locator_json,label,created_at FROM bookmarks WHERE item_id=? ORDER BY created_at DESC',

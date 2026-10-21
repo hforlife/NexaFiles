@@ -137,6 +137,9 @@ private class EpubWebView(context: Context, messenger: BinaryMessenger, id: Int,
             override fun shouldOverrideUrlLoading(v: WebView, request: WebResourceRequest): Boolean = true
             override fun shouldInterceptRequest(v: WebView, request: WebResourceRequest): WebResourceResponse? {
                 val uri = request.url
+                // Recent WebViews route the document itself (loadDataWithBaseURL)
+                // through here as a data: URL; blocking it shows "page not available".
+                if (uri.scheme == "data" || uri.scheme == "about") return null
                 if (uri.scheme == "file") {
                     val candidate = File(Uri.decode(uri.path ?: "")).canonicalFile
                     if (candidate.path.startsWith(root.path + File.separator)) return null

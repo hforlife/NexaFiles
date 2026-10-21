@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../app/theme/design_tokens.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 class DocumentSettingsSection extends StatefulWidget {
@@ -38,17 +40,31 @@ class _DocumentSettingsSectionState extends State<DocumentSettingsSection> {
   Widget build(BuildContext context) => Column(
     children: [
       const ListTile(
-        leading: Icon(Icons.picture_as_pdf_outlined),
-        title: Text('PDF'),
-        subtitle: Text(
-          'Défilement continu et page unique disponibles dans le lecteur',
+        leading: IconBubble(
+          icon: Icons.picture_as_pdf_rounded,
+          color: AppColors.pdf,
+          size: 42,
         ),
+        title: Text('PDF'),
+        subtitle: Text('Défilement continu, recherche et signets'),
       ),
       ListTile(
-        leading: const Icon(Icons.menu_book_outlined),
+        leading: const IconBubble(
+          icon: Icons.menu_book_rounded,
+          color: AppColors.reading,
+          size: 42,
+        ),
         title: const Text('EPUB'),
-        subtitle: Text('Taille ${epubSize.round()} • thème $epubTheme'),
+        subtitle: Text(
+          'Taille ${epubSize.round()} · thème ${switch (epubTheme) {
+            'dark' => 'sombre',
+            'sepia' => 'sépia',
+            _ => 'clair',
+          }}',
+        ),
         trailing: PopupMenuButton<String>(
+          tooltip: 'Thème EPUB',
+          icon: const Icon(Icons.palette_outlined),
           onSelected: (v) {
             setState(() => epubTheme = v);
             _set('epub.theme', v);
@@ -61,10 +77,15 @@ class _DocumentSettingsSectionState extends State<DocumentSettingsSection> {
         ),
       ),
       ListTile(
-        leading: const Icon(Icons.text_snippet_outlined),
+        leading: const IconBubble(
+          icon: Icons.text_snippet_rounded,
+          color: AppColors.document,
+          size: 42,
+        ),
         title: const Text('Texte'),
         subtitle: Text('Taille par défaut ${textSize.round()}'),
         trailing: IconButton(
+          tooltip: 'Agrandir le texte',
           onPressed: () {
             setState(() => textSize = textSize >= 21 ? 15 : textSize + 2);
             _set('text.fontSize', textSize);

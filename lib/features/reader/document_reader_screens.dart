@@ -1,7 +1,10 @@
 import 'dart:async';
+import 'dart:io';
 import 'dart:convert';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import '../../shared/widgets/text_prompt.dart';
+import 'reader_kit.dart';
 import 'package:flutter/services.dart';
 import '../../core/database/app_database.dart';
 import '../../core/readers/document_adapters.dart';
@@ -18,22 +21,37 @@ class TextReaderScreen extends StatefulWidget {
     required this.database,
     required this.itemId,
     required this.title,
+    this.file,
   });
   final TextReaderSession session;
   final AppDatabase database;
   final String itemId, title;
+
+  /// Local file behind the text; editing is offered when it is set.
+  final File? file;
   @override
   State<TextReaderScreen> createState() => _TextReaderScreenState();
 }
 
 class _TextReaderScreenState extends State<TextReaderScreen> {
+  /// Above this size the editor would be sluggish: reading only.
+  static const _editLimit = 2 * 1024 * 1024;
   final scroll = ScrollController();
+  late final editor = TextEditingController(text: widget.session.text);
+  late String text = widget.session.text;
   double size = 17;
-  bool dark = false;
+  bool dark = false, editing = false, saving = false;
+
+  bool get dirty => editing && editor.text != text;
+  bool get canEdit => widget.file != null && text.length <= _editLimit;
+
   @override
   void initState() {
     super.initState();
     scroll.addListener(_progress);
+    editor.addListener(() {
+      if (editing) setState(() {});
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       final p = await widget.database.progress(widget.itemId);
       if (p != null && scroll.hasClients) {
@@ -43,7 +61,7 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
   }
 
   void _progress() {
-    if (!scroll.hasClients) return;
+    if (!scroll.hasClients || editing) return;
     widget.database.saveProgress(
       widget.itemId,
       jsonEncode({'type': 'text', 'offset': scroll.offset}),
@@ -56,81 +74,200 @@ class _TextReaderScreenState extends State<TextReaderScreen> {
   @override
   void dispose() {
     scroll.dispose();
+    editor.dispose();
     widget.session.dispose();
     super.dispose();
   }
 
-  @override
-  Widget build(BuildContext context) => Scaffold(
-    backgroundColor: dark ? const Color(0xff181818) : Colors.white,
-    appBar: AppBar(
-      title: Text(widget.title),
-      actions: [
-        IconButton(onPressed: _search, icon: const Icon(Icons.search)),
-        IconButton(
-          onPressed: () => setState(() => dark = !dark),
-          icon: Icon(dark ? Icons.light_mode : Icons.dark_mode),
-        ),
-        PopupMenuButton<double>(
-          onSelected: (v) => setState(() => size = v),
-          itemBuilder: (_) => const [
-            PopupMenuItem(value: 15, child: Text('Petit')),
-            PopupMenuItem(value: 17, child: Text('Normal')),
-            PopupMenuItem(value: 21, child: Text('Grand')),
-          ],
-        ),
-      ],
-    ),
-    body: SingleChildScrollView(
-      controller: scroll,
-      padding: const EdgeInsets.all(20),
-      child: SelectableText(
-        _render(widget.session.text),
-        style: TextStyle(
-          fontSize: size,
-          height: 1.55,
-          color: dark ? Colors.white : Colors.black87,
-          fontFamily: widget.session.markdown ? 'serif' : null,
-        ),
+  /// Writes to a temporary file first, then replaces the original: a crash
+  /// mid-save never leaves a half-written file.
+  Future<bool> _save() async {
+    final file = widget.file;
+    if (file == null) return false;
+    setState(() => saving = true);
+    try {
+      final temp = File('${file.path}.nexa-tmp');
+      await temp.writeAsString(editor.text, flush: true);
+      await temp.rename(file.path);
+      if (!mounted) return true;
+      setState(() {
+        text = editor.text;
+        saving = false;
+      });
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Fichier enregistré')));
+      return true;
+    } catch (e) {
+      if (mounted) {
+        setState(() => saving = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Enregistrement impossible : $e')),
+        );
+      }
+      return false;
+    }
+  }
+
+  /// Leaving with unsaved changes: save, discard or stay.
+  Future<bool> _confirmLeave() async {
+    if (!dirty) return true;
+    final choice = await showDialog<String>(
+      context: context,
+      builder: (c) => AlertDialog(
+        title: const Text('Modifications non enregistrées'),
+        content: const Text('Voulez-vous enregistrer vos modifications ?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(c, 'discard'),
+            child: const Text('Ignorer'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(c),
+            child: const Text('Annuler'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(c, 'save'),
+            child: const Text('Enregistrer'),
+          ),
+        ],
       ),
-    ),
-  );
+    );
+    if (choice == 'save') return _save();
+    return choice == 'discard';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final foreground = dark ? Colors.white : Colors.black87;
+    return PopScope(
+      canPop: !dirty,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        if (await _confirmLeave() && context.mounted) Navigator.pop(context);
+      },
+      child: Scaffold(
+        backgroundColor: dark ? const Color(0xff181818) : Colors.white,
+        appBar: AppBar(
+          backgroundColor: dark ? const Color(0xff181818) : Colors.white,
+          foregroundColor: foreground,
+          title: Text(editing ? 'Modifier' : widget.title, maxLines: 1),
+          actions: editing
+              ? [
+                  IconButton(
+                    tooltip: 'Annuler les modifications',
+                    onPressed: () => setState(() {
+                      editor.text = text;
+                      editing = false;
+                    }),
+                    icon: const Icon(Icons.close_rounded),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.only(right: 8),
+                    child: FilledButton.icon(
+                      onPressed: saving || !dirty ? null : _save,
+                      icon: saving
+                          ? const SizedBox.square(
+                              dimension: 16,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.save_rounded),
+                      label: const Text('Enregistrer'),
+                    ),
+                  ),
+                ]
+              : [
+                  IconButton(
+                    tooltip: 'Rechercher',
+                    onPressed: _search,
+                    icon: const Icon(Icons.search_rounded),
+                  ),
+                  if (canEdit)
+                    IconButton(
+                      tooltip: 'Modifier',
+                      onPressed: () => setState(() => editing = true),
+                      icon: const Icon(Icons.edit_outlined),
+                    ),
+                  IconButton(
+                    tooltip: dark ? 'Fond clair' : 'Fond sombre',
+                    onPressed: () => setState(() => dark = !dark),
+                    icon: Icon(
+                      dark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    ),
+                  ),
+                  PopupMenuButton<double>(
+                    tooltip: 'Taille du texte',
+                    icon: const Icon(Icons.format_size_rounded),
+                    onSelected: (v) => setState(() => size = v),
+                    itemBuilder: (_) => const [
+                      PopupMenuItem(value: 15, child: Text('Petit')),
+                      PopupMenuItem(value: 17, child: Text('Normal')),
+                      PopupMenuItem(value: 21, child: Text('Grand')),
+                    ],
+                  ),
+                ],
+        ),
+        body: editing
+            ? TextField(
+                controller: editor,
+                maxLines: null,
+                expands: true,
+                autofocus: true,
+                keyboardType: TextInputType.multiline,
+                textAlignVertical: TextAlignVertical.top,
+                style: TextStyle(
+                  fontFamily: 'monospace',
+                  fontSize: size - 2,
+                  height: 1.5,
+                  color: foreground,
+                ),
+                decoration: const InputDecoration(
+                  filled: false,
+                  border: InputBorder.none,
+                  enabledBorder: InputBorder.none,
+                  focusedBorder: InputBorder.none,
+                  contentPadding: EdgeInsets.all(16),
+                ),
+              )
+            : SingleChildScrollView(
+                controller: scroll,
+                padding: const EdgeInsets.all(20),
+                child: SelectableText(
+                  _render(text),
+                  style: TextStyle(
+                    fontSize: size,
+                    height: 1.55,
+                    color: foreground,
+                    fontFamily: widget.session.markdown ? 'serif' : null,
+                  ),
+                ),
+              ),
+      ),
+    );
+  }
+
   String _render(String s) => widget.session.markdown
       ? s
             .replaceAll(RegExp(r'<[^>]*>'), '')
             .replaceAll(RegExp(r'^#{1,6}\s*', multiLine: true), '')
             .replaceAll(RegExp(r'\*\*|__|`'), '')
       : s;
-  void _search() {
-    final input = TextEditingController();
-    showDialog(
-      context: context,
-      builder: (c) => AlertDialog(
-        title: const Text('Rechercher'),
-        content: TextField(controller: input),
-        actions: [
-          FilledButton(
-            onPressed: () {
-              final i = widget.session.text.toLowerCase().indexOf(
-                input.text.toLowerCase(),
-              );
-              Navigator.pop(c);
-              if (i < 0) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(const SnackBar(content: Text('Aucun résultat')));
-              } else {
-                scroll.jumpTo(
-                  (i / widget.session.text.length) *
-                      scroll.position.maxScrollExtent,
-                );
-              }
-            },
-            child: const Text('Rechercher'),
-          ),
-        ],
-      ),
+
+  Future<void> _search() async {
+    final query = await showTextPrompt(
+      context,
+      title: 'Rechercher',
+      confirm: 'Rechercher',
     );
+    if (query == null || query.isEmpty || !mounted) return;
+    final i = text.toLowerCase().indexOf(query.toLowerCase());
+    if (i < 0) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Aucun résultat')));
+    } else if (scroll.hasClients) {
+      scroll.jumpTo((i / text.length) * scroll.position.maxScrollExtent);
+    }
   }
 }
 
@@ -188,51 +325,57 @@ class _ImageReaderScreenState extends State<ImageReaderScreen> {
             : widget.images[index].displayName;
     return Scaffold(
       backgroundColor: Colors.black,
-      appBar: controls
-          ? AppBar(
-              backgroundColor: Colors.black,
-              title: Text(title),
-              actions: [
-                if (count > 1)
-                  Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Center(child: Text('${index + 1} / $count')),
-                  ),
-              ],
-            )
-          : null,
-      body: GestureDetector(
-        onTap: () => setState(() => controls = !controls),
-        child: PageView.builder(
-          controller: pages,
-          itemCount: count,
-          onPageChanged: (v) {
-            setState(() => index = v);
-            for (final key
-                in cache.keys.where((k) => (k - v).abs() > 1).toList()) {
-              cache.remove(key);
-            }
-          },
-          itemBuilder: (_, i) => FutureBuilder<Uint8List>(
-            future: widget.images.isEmpty
-                ? Future.value(widget.session.bytes)
-                : _load(i),
-            builder: (_, snap) {
-              if (snap.hasError) {
-                return const Center(
-                  child: Text(
-                    'Image impossible à ouvrir',
-                    style: TextStyle(color: Colors.white),
-                  ),
-                );
-              }
-              if (!snap.hasData) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              return _ZoomImage(bytes: snap.data!);
-            },
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: GestureDetector(
+              onTap: () => setState(() => controls = !controls),
+              child: PageView.builder(
+                controller: pages,
+                itemCount: count,
+                allowImplicitScrolling: true,
+                onPageChanged: (v) {
+                  setState(() => index = v);
+                  for (final key
+                      in cache.keys.where((k) => (k - v).abs() > 1).toList()) {
+                    cache.remove(key);
+                  }
+                },
+                itemBuilder: (_, i) => FutureBuilder<Uint8List>(
+                  future: widget.images.isEmpty
+                      ? Future.value(widget.session.bytes)
+                      : _load(i),
+                  builder: (_, snap) {
+                    if (snap.hasError) {
+                      return const Center(
+                        child: Text(
+                          'Image impossible à ouvrir',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      );
+                    }
+                    if (!snap.hasData) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+                    return _ZoomImage(bytes: snap.data!);
+                  },
+                ),
+              ),
+            ),
           ),
-        ),
+          Positioned(
+            left: 0,
+            right: 0,
+            top: 0,
+            child: ReaderFade(
+              visible: controls,
+              child: ReaderTopBar(
+                title: title,
+                subtitle: count > 1 ? '${index + 1} / $count' : null,
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -262,7 +405,20 @@ class _ZoomImageState extends State<_ZoomImage> {
       transformationController: transform,
       minScale: .5,
       maxScale: 6,
-      child: Center(child: Image.memory(widget.bytes, fit: BoxFit.contain)),
+      // Decoded near screen resolution (2x for zoom): full-size camera
+      // photos would otherwise stall each swipe.
+      child: Center(
+        child: Image.memory(
+          widget.bytes,
+          fit: BoxFit.contain,
+          gaplessPlayback: true,
+          cacheWidth:
+              (MediaQuery.sizeOf(context).width *
+                      MediaQuery.devicePixelRatioOf(context) *
+                      2)
+                  .round(),
+        ),
+      ),
     ),
   );
 }
