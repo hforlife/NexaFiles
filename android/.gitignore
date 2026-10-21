@@ -14,3 +14,6 @@ key.properties
 
 # Gradle problem reports written next to the Android project
 /build/
+
+# Kotlin compiler daemon sessions (build artefacts)
+/.kotlin/

@@ -5,6 +5,7 @@ import '../../core/database/app_database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/platform/providers.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import '../reader/file_opener.dart';
 
 final recentOpenEpochProvider = StateProvider<int>((ref) => 0);
@@ -47,55 +48,74 @@ class RecentsScreen extends ConsumerWidget {
         return RefreshIndicator(
           onRefresh: () async => ref.invalidate(recentsProvider),
           child: ListView.builder(
-            padding: const EdgeInsets.only(bottom: 88),
+            padding: EdgeInsets.only(bottom: dockInset(context)),
             itemCount: items.length + 1,
             itemBuilder: (_, i) {
               if (i == 0) {
                 return Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  padding: const EdgeInsets.fromLTRB(20, 4, 20, 8),
                   child: Text(
-                    'Fichiers ouverts récemment',
-                    style: Theme.of(context).textTheme.titleLarge,
+                    '${items.length} fichier${items.length > 1 ? 's' : ''} ouvert${items.length > 1 ? 's' : ''} récemment',
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      color: Theme.of(context).colorScheme.onSurfaceVariant,
+                    ),
                   ),
                 );
               }
               final item = items[i - 1];
               final cover = item.coverKey == null ? null : File(item.coverKey!);
-              return ListTile(
-                minVerticalPadding: 10,
-                leading: SizedBox(
-                  width: 48,
-                  height: 62,
-                  child: cover != null && cover.existsSync()
-                      ? ClipRRect(
-                          borderRadius: BorderRadius.circular(6),
-                          child: Image.file(
-                            cover,
-                            fit: BoxFit.cover,
-                            cacheWidth: 160,
-                          ),
-                        )
-                      : DecoratedBox(
-                          decoration: BoxDecoration(
-                            color: Theme.of(
-                              context,
-                            ).colorScheme.surfaceContainerHighest,
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: ListTile(
+                  minVerticalPadding: 10,
+                  leading: SizedBox(
+                    width: 48,
+                    height: 62,
+                    child: cover != null && cover.existsSync()
+                        ? ClipRRect(
                             borderRadius: BorderRadius.circular(8),
+                            child: Image.file(
+                              cover,
+                              fit: BoxFit.cover,
+                              cacheWidth: 160,
+                            ),
+                          )
+                        : DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: Theme.of(
+                                context,
+                              ).colorScheme.surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Icon(
+                              _formatIcon(item.format),
+                              color: Theme.of(context).colorScheme.primary,
+                            ),
                           ),
-                          child: Icon(_formatIcon(item.format)),
+                  ),
+                  title: Text(
+                    item.name,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  subtitle: Text(
+                    '${_formatLabel(item.format)}${item.fraction == null ? '' : ' • ${(item.fraction! * 100).round()} % lu'}\n${_relative(item.openedAt)}',
+                    maxLines: 2,
+                  ),
+                  isThreeLine: true,
+                  onTap: () => openItem(context, ref, item),
+                  trailing: item.fraction == null
+                      ? null
+                      : SizedBox(
+                          width: 34,
+                          height: 34,
+                          child: CircularProgressIndicator(
+                            value: item.fraction!.clamp(0, 1),
+                            strokeWidth: 4,
+                            strokeCap: StrokeCap.round,
+                          ),
                         ),
                 ),
-                title: Text(
-                  item.name,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                subtitle: Text(
-                  '${_formatLabel(item.format)}${item.fraction == null ? '' : ' • ${(item.fraction! * 100).round()} % lu'}\n${_relative(item.openedAt)}',
-                  maxLines: 2,
-                ),
-                isThreeLine: true,
-                onTap: () => openItem(context, ref, item),
               );
             },
           ),

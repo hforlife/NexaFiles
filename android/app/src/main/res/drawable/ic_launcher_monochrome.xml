@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Themed icon (Android 13+): the folder with the N cut out. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.39"
+        android:scaleY="0.39"
+        android:translateX="29.04"
+        android:translateY="29.82">
+        <path
+            android:fillColor="#FFFFFFFF"
+            android:fillType="evenOdd"
+            android:pathData="M0,18 Q0,6 12,6 H46 L58,18 H116 Q128,18 128,30 V106 Q128,118 116,118 H12 Q0,118 0,106 Z M36,102 Q36,108 42,108 Q48,108 48,102 V71 L81.6,106.2 Q86,110 89.4,107.6 Q92,105.9 92,102 V56 Q92,50 86,50 Q80,50 80,56 V87 L46.4,51.8 Q42,48 38.6,50.4 Q36,52.1 36,56 Z" />
+    </group>
+</vector>

@@ -1,11 +1,13 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../app/theme/app_theme.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../core/cache/file_preview_service.dart';
 import '../../core/database/app_database.dart';
 import '../../core/storage/storage_entry.dart';
 import '../../shared/formatters.dart';
+import 'file_actions.dart';
 
 /// List row for a file or folder: thumbnail or cover, name, type, size, date
 /// and reading progress when the file is in the library.
@@ -33,62 +35,87 @@ class FileTile extends StatelessWidget {
     final detail = entry.kind == StorageEntryKind.directory
         ? 'Dossier'
         : '${fileTypeLabel(entry)} • ${formatBytes(entry.size)}${entry.modifiedAt != null ? ' • ${formatShortDate(entry.modifiedAt!)}' : ''}';
-    return ListTile(
-      minVerticalPadding: 10,
-      selected: selected,
-      leading: SizedBox(
-        width: 52,
-        height: 58,
-        child: EntryVisual(entry: entry, item: item, size: 52),
-      ),
-      title: Text(
-        item?.title ?? entry.displayName,
-        maxLines: 2,
-        overflow: TextOverflow.ellipsis,
-        style: const TextStyle(fontWeight: FontWeight.w600),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis),
-          if (item?.fraction != null) ...[
-            const SizedBox(height: 4),
-            LinearProgressIndicator(value: item!.fraction!.clamp(0, 1)),
-            Text(
-              '${(item!.fraction! * 100).round()} % lu',
-              style: Theme.of(context).textTheme.bodySmall,
-            ),
-          ],
-        ],
-      ),
-      isThreeLine: item?.fraction != null,
-      onTap: onTap,
-      onLongPress: onLongPress,
-      trailing: onMenu == null
-          ? null
-          : PopupMenuButton<String>(
-              tooltip: 'Actions',
-              onSelected: onMenu,
-              itemBuilder: (_) => [
-                const PopupMenuItem(value: 'rename', child: Text('Renommer')),
-                if (entry.kind == StorageEntryKind.directory)
-                  PopupMenuItem(
-                    value: 'favorite',
-                    child: Text(
-                      favorite ? 'Retirer des favoris' : 'Ajouter aux favoris',
+    final theme = Theme.of(context), accent = theme.colorScheme.primary;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 1),
+      child: ListTile(
+        minVerticalPadding: 10,
+        selected: selected,
+        leading: SizedBox(
+          width: 50,
+          height: 56,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              EntryVisual(entry: entry, item: item, size: 50),
+              if (selected) _SelectedMark(accent: accent),
+            ],
+          ),
+        ),
+        title: Text(
+          item?.title ?? entry.displayName,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(detail, maxLines: 1, overflow: TextOverflow.ellipsis),
+            if (item?.fraction != null) ...[
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(3),
+                      child: LinearProgressIndicator(
+                        value: item!.fraction!.clamp(0, 1),
+                        minHeight: 4,
+                      ),
                     ),
                   ),
-                if (entry.kind == StorageEntryKind.file)
-                  const PopupMenuItem(
-                    value: 'open',
-                    child: Text('Ouvrir avec…'),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${(item!.fraction! * 100).round()} % lu',
+                    style: theme.textTheme.labelSmall?.copyWith(
+                      color: accent,
+                      fontWeight: FontWeight.w700,
+                    ),
                   ),
-                const PopupMenuItem(value: 'info', child: Text('Informations')),
-                const PopupMenuItem(value: 'delete', child: Text('Supprimer')),
-              ],
-            ),
+                ],
+              ),
+            ],
+          ],
+        ),
+        isThreeLine: item?.fraction != null,
+        onTap: onTap,
+        onLongPress: onLongPress,
+        trailing: onMenu == null
+            ? null
+            : PopupMenuButton<String>(
+                tooltip: 'Actions',
+                icon: const Icon(Icons.more_horiz_rounded),
+                onSelected: onMenu,
+                itemBuilder: (_) =>
+                    fileMenuItems(entry, favorite: favorite, canFavorite: true),
+              ),
+      ),
     );
   }
+}
+
+/// Accent check drawn over a selected thumbnail.
+class _SelectedMark extends StatelessWidget {
+  const _SelectedMark({required this.accent});
+  final Color accent;
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+    decoration: BoxDecoration(
+      color: accent.withValues(alpha: .85),
+      borderRadius: BorderRadius.circular(AppRadius.sm),
+    ),
+    child: Icon(Icons.check_rounded, color: AppTheme.onColor(accent), size: 28),
+  );
 }
 
 class FileGridTile extends StatelessWidget {
@@ -105,48 +132,70 @@ class FileGridTile extends StatelessWidget {
   final bool selected;
   final VoidCallback onTap, onLongPress;
   @override
-  Widget build(BuildContext context) => Card(
-    color: selected ? Theme.of(context).colorScheme.secondaryContainer : null,
-    clipBehavior: Clip.antiAlias,
-    child: InkWell(
-      onTap: onTap,
-      onLongPress: onLongPress,
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Expanded(
-            child: SizedBox(
-              width: double.infinity,
-              child: EntryVisual(entry: entry, item: item, size: 64),
-            ),
-          ),
-          if (item?.fraction != null)
-            LinearProgressIndicator(value: item!.fraction!.clamp(0, 1)),
-          Padding(
-            padding: const EdgeInsets.all(10),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item?.title ?? entry.displayName,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontWeight: FontWeight.w600),
-                ),
-                Text(
-                  entry.kind == StorageEntryKind.directory
-                      ? 'Dossier'
-                      : '${entry.displayName.split('.').last.toUpperCase()} • ${formatBytes(entry.size)}',
-                  maxLines: 1,
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ],
-            ),
-          ),
-        ],
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), accent = theme.colorScheme.primary;
+    return Card(
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(AppRadius.md),
+        side: selected
+            ? BorderSide(color: accent, width: 2.5)
+            : BorderSide(color: context.surfaces.line),
       ),
-    ),
-  );
+      child: InkWell(
+        onTap: onTap,
+        onLongPress: onLongPress,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(8, 8, 8, 0),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    EntryVisual(entry: entry, item: item, size: 64),
+                    if (selected) _SelectedMark(accent: accent),
+                  ],
+                ),
+              ),
+            ),
+            if (item?.fraction != null)
+              Padding(
+                padding: const EdgeInsets.fromLTRB(8, 6, 8, 0),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(3),
+                  child: LinearProgressIndicator(
+                    value: item!.fraction!.clamp(0, 1),
+                    minHeight: 4,
+                  ),
+                ),
+              ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(10, 8, 10, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item?.title ?? entry.displayName,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.labelLarge,
+                  ),
+                  Text(
+                    entry.kind == StorageEntryKind.directory
+                        ? 'Dossier'
+                        : '${entry.displayName.split('.').last.toUpperCase()} • ${formatBytes(entry.size)}',
+                    maxLines: 1,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class EntryVisual extends StatelessWidget {

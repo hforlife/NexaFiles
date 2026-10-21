@@ -4,6 +4,8 @@ import '../../core/cache/cache_manager.dart';
 import '../../core/database/database_provider.dart';
 import '../recents/recents_screen.dart';
 import '../../shared/formatters.dart';
+import '../../shared/widgets/nexa_ui.dart';
+import '../../app/theme/design_tokens.dart';
 
 class StorageDataScreen extends ConsumerStatefulWidget {
   const StorageDataScreen({super.key});
@@ -26,35 +28,113 @@ class _StorageDataScreenState extends ConsumerState<StorageDataScreen> {
   }
 
   @override
-  Widget build(BuildContext context) => Scaffold(
-    appBar: AppBar(title: const Text('Stockage et données')),
-    body: ListView(
-      children: [
-        ListTile(
-          leading: const Icon(Icons.cleaning_services_outlined),
-          title: const Text('Cache de lecture'),
-          subtitle: Text(
-            bytes == null
-                ? 'Calcul…'
-                : '${formatBytes(bytes)} • La progression et les signets sont conservés',
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Scaffold(
+      appBar: AppBar(title: const Text('Stockage et données')),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 32),
+        children: [
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      IconBubble(
+                        icon: Icons.cleaning_services_rounded,
+                        color: AppColors.image,
+                        size: 48,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Cache de lecture',
+                              style: theme.textTheme.titleMedium,
+                            ),
+                            Text(
+                              bytes == null ? 'Calcul…' : formatBytes(bytes),
+                              style: theme.textTheme.headlineSmall,
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Pages extraites, couvertures et miniatures. La '
+                    'progression et les signets sont conservés.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: busy ? null : _clearCache,
+                      icon: const Icon(Icons.delete_sweep_outlined),
+                      label: const Text('Vider le cache'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-          trailing: FilledButton(
-            onPressed: busy ? null : _clearCache,
-            child: const Text('Vider'),
+          const SizedBox(height: 12),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(18),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      IconBubble(
+                        icon: Icons.restart_alt_rounded,
+                        color: AppColors.pdf,
+                        size: 48,
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Text(
+                          'Progression et historique',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Text(
+                    'Efface les positions de lecture et les fichiers récents. '
+                    'Les favoris, collections et signets restent conservés.',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  const SizedBox(height: 14),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: theme.colorScheme.error,
+                      ),
+                      onPressed: busy ? null : _reset,
+                      icon: const Icon(Icons.restart_alt_rounded),
+                      label: const Text('Réinitialiser'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
           ),
-        ),
-        const Divider(),
-        ListTile(
-          leading: const Icon(Icons.restart_alt),
-          title: const Text('Réinitialiser progression et historique'),
-          subtitle: const Text(
-            'Efface les positions de lecture et les fichiers récents. Les favoris, collections et signets restent conservés.',
-          ),
-          onTap: busy ? null : _reset,
-        ),
-      ],
-    ),
-  );
+        ],
+      ),
+    );
+  }
+
   Future<void> _clearCache() async {
     setState(() => busy = true);
     await CacheManager().clearAll();

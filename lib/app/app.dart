@@ -13,8 +13,8 @@ class NexaFilesApp extends ConsumerWidget {
     return MaterialApp(
       title: 'NexaFiles',
       debugShowCheckedModeBanner: false,
-      theme: AppTheme.light(),
-      darkTheme: AppTheme.dark(),
+      theme: AppTheme.light(settings.accent),
+      darkTheme: AppTheme.dark(settings.accent),
       themeMode: settings.themeMode,
       locale: settings.locale,
       supportedLocales: const [Locale('fr'), Locale('en')],

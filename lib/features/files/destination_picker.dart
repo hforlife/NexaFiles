@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../app/theme/design_tokens.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import '../../core/storage/storage_entry.dart';
 import '../../core/storage/storage_repository.dart';
 import 'file_rules.dart';
@@ -75,23 +77,30 @@ class _DestinationPickerState extends State<DestinationPicker> {
         title: Text(path.isEmpty ? widget.title : path.last.displayName),
         actions: [
           if (path.isNotEmpty)
-            TextButton(
-              onPressed: () => Navigator.pop(context, path.last.uri),
-              child: const Text('Choisir'),
+            Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: FilledButton(
+                style: FilledButton.styleFrom(minimumSize: const Size(0, 40)),
+                onPressed: () => Navigator.pop(context, path.last.uri),
+                child: const Text('Choisir ici'),
+              ),
             ),
         ],
       ),
       body: loading
           ? const Center(child: CircularProgressIndicator())
           : ListView(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
               children: path.isEmpty
                   ? [
                       for (final root in widget.roots)
                         ListTile(
-                          leading: Icon(
-                            root.removable
-                                ? Icons.sd_card_outlined
-                                : Icons.phone_android,
+                          leading: IconBubble(
+                            icon: root.removable
+                                ? Icons.sd_card_rounded
+                                : Icons.smartphone_rounded,
+                            color: Theme.of(context).colorScheme.primary,
+                            size: 42,
                           ),
                           title: Text(root.name),
                           onTap: () => open(root.entry),
@@ -100,9 +109,13 @@ class _DestinationPickerState extends State<DestinationPicker> {
                   : [
                       for (final folder in directories)
                         ListTile(
-                          leading: const Icon(Icons.folder_outlined),
+                          leading: const IconBubble(
+                            icon: Icons.folder_rounded,
+                            color: AppColors.folder,
+                            size: 42,
+                          ),
                           title: Text(folder.displayName),
-                          trailing: const Icon(Icons.chevron_right),
+                          trailing: const Icon(Icons.chevron_right_rounded),
                           onTap: () => open(folder),
                         ),
                     ],
