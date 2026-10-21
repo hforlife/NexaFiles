@@ -1,4 +1,4 @@
-package com.example.nexa_file
+package com.hdeveloppement.nexafiles
 
 import android.Manifest
 import android.app.Activity

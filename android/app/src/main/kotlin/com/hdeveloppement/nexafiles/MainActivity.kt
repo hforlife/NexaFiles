@@ -1,4 +1,4 @@
-package com.example.nexa_file
+package com.hdeveloppement.nexafiles
 
 import android.content.Intent
 import io.flutter.embedding.android.FlutterActivity
