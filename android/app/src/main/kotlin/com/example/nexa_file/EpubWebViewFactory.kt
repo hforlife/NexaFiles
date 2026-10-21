@@ -61,7 +61,11 @@ private class Style(args: Map<*, *>) {
 private const val ENGINE = """
 (function(){
   var page=0,count=1,ready=false;
-  function W(){return window.innerWidth||document.documentElement.clientWidth||1;}
+  /* One page = one column plus its gap, measured on the real layout:
+     innerWidth grows with the overflowing columns, and rounding to whole
+     pixels would drift a little more on every page. */
+  function W(){var cs=getComputedStyle(document.body);var w=parseFloat(cs.columnWidth)+parseFloat(cs.columnGap);
+    return w>0?w:(document.documentElement.clientWidth||1);}
   function measure(){count=Math.max(1,Math.ceil((document.documentElement.scrollWidth-1)/W()));}
   function show(){page=Math.max(0,Math.min(page,count-1));document.scrollingElement.scrollLeft=page*W();NexaBridge.position(page,count);}
   window.nexaRelayout=function(f){measure();page=f<0?count-1:Math.min(count-1,Math.floor(f*count+1e-6));show();};
@@ -156,7 +160,10 @@ private class EpubWebView(context: Context, messenger: BinaryMessenger, id: Int,
         val clean = target.readText()
             .replace(Regex("<script\\b[^>]*>.*?</script>", setOf(RegexOption.IGNORE_CASE, RegexOption.DOT_MATCHES_ALL)), "")
             .replace(Regex("\\s+on[a-z]+\\s*=\\s*(\"[^\"]*\"|'[^']*'|[^\\s>]+)", RegexOption.IGNORE_CASE), "")
-        val head = "<style id=\"nexa-style\">${style.css(paginated)}</style>"
+        // Without a viewport the WebView widens its layout to fit every
+        // column, and page offsets go wrong.
+        val head = "<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">" +
+            "<style id=\"nexa-style\">${style.css(paginated)}</style>"
         var html = if (clean.contains("</head>", true)) clean.replaceFirst(Regex("</head>", RegexOption.IGNORE_CASE), "$head</head>") else head + clean
         if (paginated) {
             val engine = "<script>${ENGINE.replace("__INITIAL__", fraction.toString())}</script>"

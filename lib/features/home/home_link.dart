@@ -118,7 +118,13 @@ class _HomeActionsState extends ConsumerState<HomeActionsListener> {
           return;
         }
         ref.read(currentTabProvider.notifier).state = AppTab.files;
-        await ref.read(filesControllerProvider.notifier).openDirectory(entry);
+        final files = ref.read(filesControllerProvider.notifier);
+        // At cold start the volumes may not be loaded yet: without them the
+        // breadcrumb would only show the folder itself.
+        if (ref.read(filesControllerProvider).roots.isEmpty) {
+          await files.loadRoots();
+        }
+        await files.openDirectory(entry);
       case 'search':
         push(const SearchScreen());
       case 'cleaner':

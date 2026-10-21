@@ -142,7 +142,20 @@ class ReaderGlass extends StatelessWidget {
           borderRadius: BorderRadius.circular(radius),
           border: Border.all(color: ReaderColors.line),
         ),
-        child: Padding(padding: padding, child: child),
+        // White controls whatever the app theme: its IconButton style
+        // would otherwise paint them in the theme's dark "ink".
+        child: IconButtonTheme(
+          data: IconButtonThemeData(
+            style: IconButton.styleFrom(
+              foregroundColor: ReaderColors.text,
+              disabledForegroundColor: ReaderColors.text.withValues(alpha: .35),
+            ),
+          ),
+          child: IconTheme(
+            data: const IconThemeData(color: ReaderColors.text),
+            child: Padding(padding: padding, child: child),
+          ),
+        ),
       ),
     ),
   );

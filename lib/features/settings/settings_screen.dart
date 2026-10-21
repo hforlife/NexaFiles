@@ -6,6 +6,8 @@ import '../../app/theme/design_tokens.dart';
 import '../../core/settings/settings_controller.dart';
 import '../../shared/widgets/nexa_logo.dart';
 import '../../shared/widgets/nexa_ui.dart';
+import '../../app/app_info.dart';
+import 'about_screen.dart';
 import 'comic_settings_section.dart';
 import 'document_settings_section.dart';
 import 'reader_options_section.dart';
@@ -112,19 +114,13 @@ class SettingsScreen extends ConsumerWidget {
           ListTile(
             leading: const NexaLogo(size: 42),
             title: const Text('À propos de NexaFiles'),
-            subtitle: const Text('Version 1.0.0+1'),
-            onTap: () => showAboutDialog(
-              context: context,
-              applicationName: 'NexaFiles',
-              applicationIcon: const NexaLogo(size: 56),
-              applicationVersion: '1.0.0+1',
-              applicationLegalese:
-                  'Gestionnaire de fichiers et lecteur hors ligne.',
-              children: [
-                const Text(
-                  'NexaFiles organise, ouvre et lit vos documents, livres et bandes dessinées en respectant les autorisations Android.',
-                ),
-              ],
+            subtitle: const Text(
+              'Version ${AppInfo.version} · ${AppInfo.developer}',
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const AboutScreen()),
             ),
           ),
         ],

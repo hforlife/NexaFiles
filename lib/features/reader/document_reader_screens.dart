@@ -291,7 +291,7 @@ class ImageReaderScreen extends StatefulWidget {
 
 class _ImageReaderScreenState extends State<ImageReaderScreen> {
   late final PageController pages;
-  bool controls = true;
+  bool controls = true, zoomed = false;
   late int index;
   final cache = <int, Future<Uint8List>>{};
   @override
@@ -334,8 +334,13 @@ class _ImageReaderScreenState extends State<ImageReaderScreen> {
                 controller: pages,
                 itemCount: count,
                 allowImplicitScrolling: true,
+                // While zoomed, horizontal drags pan the photo instead.
+                physics: zoomed ? const NeverScrollableScrollPhysics() : null,
                 onPageChanged: (v) {
-                  setState(() => index = v);
+                  setState(() {
+                    index = v;
+                    zoomed = false;
+                  });
                   for (final key
                       in cache.keys.where((k) => (k - v).abs() > 1).toList()) {
                     cache.remove(key);
@@ -357,7 +362,12 @@ class _ImageReaderScreenState extends State<ImageReaderScreen> {
                     if (!snap.hasData) {
                       return const Center(child: CircularProgressIndicator());
                     }
-                    return _ZoomImage(bytes: snap.data!);
+                    return _ZoomImage(
+                      bytes: snap.data!,
+                      onZoomChanged: (v) {
+                        if (v != zoomed) setState(() => zoomed = v);
+                      },
+                    );
                   },
                 ),
               ),
@@ -382,14 +392,32 @@ class _ImageReaderScreenState extends State<ImageReaderScreen> {
 }
 
 class _ZoomImage extends StatefulWidget {
-  const _ZoomImage({required this.bytes});
+  const _ZoomImage({required this.bytes, required this.onZoomChanged});
   final Uint8List bytes;
+  final ValueChanged<bool> onZoomChanged;
   @override
   State<_ZoomImage> createState() => _ZoomImageState();
 }
 
 class _ZoomImageState extends State<_ZoomImage> {
   final transform = TransformationController();
+  bool _zoomed = false;
+
+  @override
+  void initState() {
+    super.initState();
+    transform.addListener(_report);
+  }
+
+  /// Panning is only needed (and only enabled) once the photo is zoomed;
+  /// otherwise the swipe belongs to the gallery.
+  void _report() {
+    final zoomed = transform.value.getMaxScaleOnAxis() > 1.01;
+    if (zoomed == _zoomed) return;
+    setState(() => _zoomed = zoomed);
+    widget.onZoomChanged(zoomed);
+  }
+
   @override
   void dispose() {
     transform.dispose();
@@ -403,8 +431,9 @@ class _ZoomImageState extends State<_ZoomImage> {
         : Matrix4.identity(),
     child: InteractiveViewer(
       transformationController: transform,
-      minScale: .5,
+      minScale: 1,
       maxScale: 6,
+      panEnabled: _zoomed,
       // Decoded near screen resolution (2x for zoom): full-size camera
       // photos would otherwise stall each swipe.
       child: Center(
