@@ -568,18 +568,11 @@ class _TapLayoutPainter extends CustomPainter {
   final Color previous, next, menu;
   @override
   void paint(Canvas canvas, Size size) {
-    // Samples the real hit-test function so the diagram never lies.
+    // Samples the real hit-test function so the diagram never lies. Cells
+    // of one action form a single path: no seams between them.
     const steps = 24;
     final cw = size.width / steps, ch = size.height / steps;
-    // No anti-aliasing: adjacent cells would otherwise show seams.
-    Paint fill(Color c) => Paint()
-      ..color = c
-      ..isAntiAlias = false;
-    final paints = {
-      ComicTapAction.previous: fill(previous),
-      ComicTapAction.next: fill(next),
-      ComicTapAction.toggleControls: fill(menu),
-    };
+    final paths = {for (final a in ComicTapAction.values) a: Path()};
     for (var i = 0; i < steps; i++) {
       for (var j = 0; j < steps; j++) {
         final action = comicTapAction(
@@ -590,11 +583,20 @@ class _TapLayoutPainter extends CustomPainter {
           direction: ComicReadingDirection.leftToRight,
           layout: layout,
         );
-        canvas.drawRect(
-          Rect.fromLTWH(i * cw, j * ch, cw + .5, ch + .5),
-          paints[action]!,
-        );
+        paths[action]!.addRect(Rect.fromLTWH(i * cw, j * ch, cw, ch));
       }
+    }
+    final colors = {
+      ComicTapAction.previous: previous,
+      ComicTapAction.next: next,
+      ComicTapAction.toggleControls: menu,
+    };
+    for (final MapEntry(key: action, value: path) in paths.entries) {
+      // Union of adjacent rects: filled once, no visible grid.
+      canvas.drawPath(
+        Path.combine(PathOperation.union, Path(), path),
+        Paint()..color = colors[action]!,
+      );
     }
   }
 

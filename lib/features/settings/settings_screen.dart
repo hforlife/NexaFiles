@@ -5,6 +5,7 @@ import '../../app/theme/app_theme.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../core/settings/settings_controller.dart';
 import '../../shared/widgets/nexa_logo.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import 'comic_settings_section.dart';
 import 'document_settings_section.dart';
 import 'reader_options_section.dart';
@@ -52,9 +53,12 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          const _SubHeader('Couleur d’accent'),
+          _SubHeader(
+            'Couleur d’accent',
+            trailing: AppAccents.of(settings.accent).name,
+          ),
           _AccentPicker(value: settings.accent, onChanged: settings.setAccent),
-          const Divider(),
+          const SizedBox(height: 12),
           const _Header('Langue / Language'),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -71,7 +75,6 @@ class SettingsScreen extends ConsumerWidget {
               ),
             ),
           ),
-          const Divider(),
           _Header(s.reading),
           const ReaderOptionsSection(),
           const SizedBox(height: 8),
@@ -79,7 +82,11 @@ class SettingsScreen extends ConsumerWidget {
           const DocumentSettingsSection(),
           _Header(s.storage),
           SwitchListTile(
-            secondary: const Icon(Icons.visibility_outlined),
+            secondary: IconBubble(
+              icon: Icons.visibility_rounded,
+              color: Theme.of(context).colorScheme.primary,
+              size: 42,
+            ),
             title: const Text('Afficher les fichiers cachés'),
             subtitle: const Text(
               'Affiche les éléments dont le nom commence par un point',
@@ -88,7 +95,12 @@ class SettingsScreen extends ConsumerWidget {
             onChanged: ref.read(filesControllerProvider.notifier).setShowHidden,
           ),
           ListTile(
-            leading: const Icon(Icons.storage_outlined),
+            leading: const IconBubble(
+              icon: Icons.data_usage_rounded,
+              color: AppColors.image,
+              size: 42,
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
             title: const Text('Stockage et données'),
             subtitle: const Text('Cache, progression et historique'),
             onTap: () => Navigator.push(
@@ -98,7 +110,7 @@ class SettingsScreen extends ConsumerWidget {
           ),
           _Header(s.about),
           ListTile(
-            leading: const Icon(Icons.info_outline),
+            leading: const NexaLogo(size: 42),
             title: const Text('À propos de NexaFiles'),
             subtitle: const Text('Version 1.0.0+1'),
             onTap: () => showAboutDialog(
@@ -122,13 +134,31 @@ class SettingsScreen extends ConsumerWidget {
 }
 
 class _SubHeader extends StatelessWidget {
-  const _SubHeader(this.text);
+  const _SubHeader(this.text, {this.trailing});
   final String text;
+
+  /// Current value shown on the right (e.g. the accent's name).
+  final String? trailing;
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.fromLTRB(20, 20, 16, 10),
-    child: Text(text, style: Theme.of(context).textTheme.titleSmall),
-  );
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 10),
+      child: Row(
+        children: [
+          Expanded(child: Text(text, style: theme.textTheme.titleSmall)),
+          if (trailing != null)
+            Text(
+              trailing!,
+              style: theme.textTheme.labelMedium?.copyWith(
+                color: theme.colorScheme.primary,
+                fontWeight: FontWeight.w700,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
 }
 
 /// Swatches for the accent colour, with a live preview of both worlds.
@@ -221,8 +251,6 @@ class _AccentPicker extends StatelessWidget {
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(current.name, style: Theme.of(context).textTheme.bodySmall),
         ],
       ),
     );
