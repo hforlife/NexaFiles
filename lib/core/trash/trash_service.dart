@@ -115,6 +115,20 @@ class TrashService {
     await _save(items);
   }
 
+  /// Deletes for good what has been in the trash longer than [age].
+  Future<int> purgeOlderThan(Duration age) async {
+    final limit = DateTime.now().subtract(age);
+    var purged = 0;
+    for (final item in await list()) {
+      if (!item.deletedAt.isBefore(limit)) continue;
+      try {
+        await deletePermanently(item);
+        purged++;
+      } catch (_) {}
+    }
+    return purged;
+  }
+
   Future<void> empty() async {
     for (final item in await list()) {
       try {

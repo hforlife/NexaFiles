@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="widget_quick_label">NexaFiles · Accès rapide</string>
+    <string name="widget_quick_description">Espace de stockage et raccourcis : recherche, musique, vidéos, nettoyage.</string>
+    <string name="widget_player_label">NexaFiles · Lecture en cours</string>
+    <string name="widget_player_description">Le titre en cours dans NexaFiles, avec lecture, pause et piste suivante.</string>
+</resources>

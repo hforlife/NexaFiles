@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Pinned folder shortcut: amber folder with the brand N. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <group android:scaleX="0.39" android:scaleY="0.39"
+        android:translateX="29.04" android:translateY="29.82">
+        <path android:fillColor="#FFF5A623"
+            android:pathData="M0,18 Q0,6 12,6 H46 L58,18 H116 Q128,18 128,30 V106 Q128,118 116,118 H12 Q0,118 0,106 Z" />
+        <path android:fillColor="#FFFFB020"
+            android:pathData="M12,36 H116 Q128,36 128,48 V106 Q128,118 116,118 H12 Q0,118 0,106 V48 Q0,36 12,36 Z" />
+        <path android:pathData="M42,102 V56 L86,102 V56"
+            android:strokeColor="#FFFFFFFF" android:strokeWidth="12"
+            android:strokeLineCap="round" android:strokeLineJoin="round" />
+    </group>
+</vector>

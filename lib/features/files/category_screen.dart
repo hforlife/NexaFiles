@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../core/comics/comic_page_source.dart';
@@ -7,7 +8,9 @@ import '../../core/storage/storage_entry.dart';
 import '../../core/storage/storage_repository.dart';
 import '../../shared/formatters.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import '../reader/file_opener.dart';
+import 'file_actions.dart';
 import 'file_tiles.dart';
 
 /// Presentation of a home-screen category (keys from [fileCategoryKeys]).
@@ -63,6 +66,24 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
   String query = '';
   bool searching = false;
   _CategorySort sort = _CategorySort.recent;
+  late bool grid = widget.category.visual;
+
+  late final actions = FileActions(
+    context,
+    ref,
+    onChanged: () async {
+      // Background operations may finish after this screen is closed.
+      if (!mounted) return;
+      setState(() => files = _load());
+      await files;
+    },
+  );
+
+  Future<void> _longPress(StorageEntry entry) async {
+    HapticFeedback.selectionClick();
+    final action = await showFileActionsSheet(context, entry);
+    if (action != null) await actions.handle(action, entry);
+  }
 
   Future<List<StorageEntry>> _load() =>
       ref.read(storageRepositoryProvider).categoryFiles(widget.category.key);
@@ -105,8 +126,8 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
                 autofocus: true,
                 decoration: InputDecoration(
                   hintText: 'Rechercher dans ${category.label.toLowerCase()}',
-                  border: InputBorder.none,
-                  filled: false,
+                  prefixIcon: const Icon(Icons.search_rounded),
+                  isDense: true,
                 ),
                 onChanged: (v) => setState(() => query = v),
               )
@@ -118,11 +139,18 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
               searching = !searching;
               query = '';
             }),
-            icon: Icon(searching ? Icons.close : Icons.search),
+            icon: Icon(searching ? Icons.close_rounded : Icons.search_rounded),
+          ),
+          IconButton(
+            tooltip: grid ? 'Afficher en liste' : 'Afficher en grille',
+            onPressed: () => setState(() => grid = !grid),
+            icon: Icon(
+              grid ? Icons.view_agenda_outlined : Icons.grid_view_rounded,
+            ),
           ),
           PopupMenuButton<_CategorySort>(
             tooltip: 'Trier',
-            icon: const Icon(Icons.sort),
+            icon: const Icon(Icons.swap_vert_rounded),
             initialValue: sort,
             onSelected: (v) => setState(() => sort = v),
             itemBuilder: (_) => const [
@@ -167,11 +195,38 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
             );
           }
           final total = shown.fold<int>(0, (sum, e) => sum + (e.size ?? 0));
+          final theme = Theme.of(context);
           final header = Padding(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
-            child: Text(
-              '${shown.length} fichier${shown.length > 1 ? 's' : ''} • ${formatBytes(total)}',
-              style: Theme.of(context).textTheme.bodySmall,
+            padding: const EdgeInsets.fromLTRB(16, 4, 16, 12),
+            child: Card(
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Row(
+                  children: [
+                    IconBubble(
+                      icon: category.icon,
+                      color: category.color,
+                      size: 52,
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            '${shown.length} fichier${shown.length > 1 ? 's' : ''}',
+                            style: theme.textTheme.titleLarge,
+                          ),
+                          Text(
+                            '${formatBytes(total)} · ${_sortLabel(sort)}',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
           );
           return RefreshIndicator(
@@ -182,34 +237,58 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
             child: CustomScrollView(
               slivers: [
                 SliverToBoxAdapter(child: header),
-                if (category.visual)
+                if (grid && category.visual)
                   SliverPadding(
-                    padding: const EdgeInsets.fromLTRB(4, 4, 4, 24),
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 32),
                     sliver: SliverGrid.builder(
                       gridDelegate:
                           const SliverGridDelegateWithMaxCrossAxisExtent(
                             maxCrossAxisExtent: 130,
-                            crossAxisSpacing: 4,
-                            mainAxisSpacing: 4,
+                            crossAxisSpacing: 6,
+                            mainAxisSpacing: 6,
                           ),
                       itemCount: shown.length,
-                      itemBuilder: (_, i) => InkWell(
+                      itemBuilder: (_, i) => _VisualTile(
+                        entry: shown[i],
+                        video: category.key == 'videos',
                         onTap: () => _open(shown[i], shown),
-                        child: EntryVisual(
-                          entry: shown[i],
-                          item: null,
-                          size: 48,
-                        ),
+                        onLongPress: () => _longPress(shown[i]),
+                      ),
+                    ),
+                  )
+                else if (grid)
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(12, 0, 12, 32),
+                    sliver: SliverGrid.builder(
+                      gridDelegate:
+                          const SliverGridDelegateWithMaxCrossAxisExtent(
+                            maxCrossAxisExtent: 180,
+                            childAspectRatio: .78,
+                            crossAxisSpacing: 8,
+                            mainAxisSpacing: 8,
+                          ),
+                      itemCount: shown.length,
+                      itemBuilder: (_, i) => FileGridTile(
+                        entry: shown[i],
+                        item: null,
+                        selected: false,
+                        onTap: () => _open(shown[i], shown),
+                        onLongPress: () => _longPress(shown[i]),
                       ),
                     ),
                   )
                 else
-                  SliverList.builder(
-                    itemCount: shown.length,
-                    itemBuilder: (_, i) => FileTile(
-                      entry: shown[i],
-                      item: null,
-                      onTap: () => _open(shown[i], shown),
+                  SliverPadding(
+                    padding: const EdgeInsets.only(bottom: 32),
+                    sliver: SliverList.builder(
+                      itemCount: shown.length,
+                      itemBuilder: (_, i) => FileTile(
+                        entry: shown[i],
+                        item: null,
+                        onTap: () => _open(shown[i], shown),
+                        onLongPress: () => _longPress(shown[i]),
+                        onMenu: (action) => actions.handle(action, shown[i]),
+                      ),
                     ),
                   ),
               ],
@@ -219,4 +298,61 @@ class _CategoryScreenState extends ConsumerState<CategoryScreen> {
       ),
     );
   }
+}
+
+String _sortLabel(_CategorySort value) => switch (value) {
+  _CategorySort.recent => 'plus récents d’abord',
+  _CategorySort.name => 'par nom',
+  _CategorySort.size => 'plus volumineux d’abord',
+};
+
+/// Square thumbnail; videos get a play badge.
+class _VisualTile extends StatelessWidget {
+  const _VisualTile({
+    required this.entry,
+    required this.video,
+    required this.onTap,
+    required this.onLongPress,
+  });
+  final StorageEntry entry;
+  final bool video;
+  final VoidCallback onTap, onLongPress;
+  @override
+  Widget build(BuildContext context) => Semantics(
+    button: true,
+    label: entry.displayName,
+    excludeSemantics: true,
+    child: GestureDetector(
+      onTap: onTap,
+      onLongPress: onLongPress,
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(AppRadius.sm),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            EntryVisual(entry: entry, item: null, size: 48),
+            if (video)
+              const Positioned(
+                left: 6,
+                bottom: 6,
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: Color(0x99000000),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Padding(
+                    padding: EdgeInsets.all(3),
+                    child: Icon(
+                      Icons.play_arrow_rounded,
+                      color: Colors.white,
+                      size: 18,
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    ),
+  );
 }

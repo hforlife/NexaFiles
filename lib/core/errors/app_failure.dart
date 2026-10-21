@@ -33,6 +33,18 @@ class ArchiveFailure extends AppFailure {
   const ArchiveFailure(super.message, [super.cause]);
 }
 
+/// The archive is encrypted and no password was given.
+class PasswordRequiredFailure extends ArchiveFailure {
+  const PasswordRequiredFailure([
+    super.message = 'Cette archive est protégée par un mot de passe',
+  ]);
+}
+
+/// The given password does not decrypt the archive.
+class WrongPasswordFailure extends ArchiveFailure {
+  const WrongPasswordFailure([super.message = 'Mot de passe incorrect']);
+}
+
 class CorruptedFileFailure extends AppFailure {
   const CorruptedFileFailure([
     super.message = 'Le fichier est endommagé',

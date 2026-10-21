@@ -5,6 +5,7 @@ import '../readers/reader_core.dart';
 import '../archives/archive_core.dart';
 import '../archives/zip_archive_adapter.dart';
 import '../archives/native_archive_adapter.dart';
+import '../archives/tar_archive_adapter.dart';
 import '../formats/detected_format.dart';
 import '../comics/comic_reader_adapter.dart';
 import '../readers/document_adapters.dart';
@@ -18,6 +19,7 @@ final archiveRegistryProvider = Provider<ArchiveRegistry>(
     ZipArchiveAdapter(),
     NativeArchiveAdapter(ContainerFormat.rar),
     NativeArchiveAdapter(ContainerFormat.sevenZip),
+    TarFamilyAdapter(),
   ]),
 );
 final readerRegistryProvider = Provider<ReaderRegistry>(

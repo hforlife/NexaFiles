@@ -151,9 +151,12 @@ class FilesController extends StateNotifier<FileManagerState> {
   static const _viewKey = 'files.view_mode',
       _sortKey = 'files.sort',
       _directionKey = 'files.sort_direction',
-      _hiddenKey = 'files.show_hidden';
+      _hiddenKey = 'files.show_hidden',
+      _layoutPrefix = 'files.layout.';
+  SharedPreferences? _prefs;
+
   Future<void> initialize() async {
-    final prefs = await SharedPreferences.getInstance();
+    final prefs = _prefs = await SharedPreferences.getInstance();
     if (!mounted) return;
     state = state.copyWith(
       showHidden: prefs.getBool(_hiddenKey) ?? false,
@@ -345,12 +348,42 @@ class FilesController extends StateNotifier<FileManagerState> {
     await refresh();
   }
 
+  /// Each folder remembers its own view and sort; unknown folders follow
+  /// the last choice made anywhere.
+  void _applyFolderLayout(StorageEntry folder) {
+    final raw = _prefs?.getString('$_layoutPrefix${folder.uri.toFilePath()}');
+    if (raw == null) return;
+    final parts = raw.split('|');
+    if (parts.length != 3) return;
+    state = state.copyWith(
+      viewMode: FileViewMode.values.asNameMap()[parts[0]] ?? state.viewMode,
+      sort: FileSort.values.asNameMap()[parts[1]] ?? state.sort,
+      direction: SortDirection.values.asNameMap()[parts[2]] ?? state.direction,
+    );
+  }
+
+  /// Saves the current layout for the open folder and as the default.
+  Future<void> _saveLayout() async {
+    final prefs = _prefs ??= await SharedPreferences.getInstance();
+    await prefs.setString(_viewKey, state.viewMode.name);
+    await prefs.setString(_sortKey, state.sort.name);
+    await prefs.setString(_directionKey, state.direction.name);
+    final current = state.current;
+    if (current != null) {
+      await prefs.setString(
+        '$_layoutPrefix${current.uri.toFilePath()}',
+        '${state.viewMode.name}|${state.sort.name}|${state.direction.name}',
+      );
+    }
+  }
+
   Future<void> refresh() async {
     final current = state.current;
     if (current == null) {
       await loadRoots();
       return;
     }
+    _applyFolderLayout(current);
     state = state.copyWith(loading: true, clearFailure: true);
     try {
       final entries = await PerfTrace.measure(
@@ -402,29 +435,21 @@ class FilesController extends StateNotifier<FileManagerState> {
 
   Future<void> setViewMode(FileViewMode value) async {
     state = state.copyWith(viewMode: value);
-    await (await SharedPreferences.getInstance()).setString(
-      _viewKey,
-      value.name,
-    );
+    await _saveLayout();
   }
 
   Future<void> setSort(FileSort value) async {
     state = state.copyWith(sort: value);
-    await (await SharedPreferences.getInstance()).setString(
-      _sortKey,
-      value.name,
-    );
+    await _saveLayout();
   }
 
   Future<void> toggleDirection() async {
-    final value = state.direction == SortDirection.ascending
-        ? SortDirection.descending
-        : SortDirection.ascending;
-    state = state.copyWith(direction: value);
-    await (await SharedPreferences.getInstance()).setString(
-      _directionKey,
-      value.name,
+    state = state.copyWith(
+      direction: state.direction == SortDirection.ascending
+          ? SortDirection.descending
+          : SortDirection.ascending,
     );
+    await _saveLayout();
   }
 
   Future<void> createFolder(String name) async {

@@ -1,22 +1,33 @@
 import 'dart:async';
 import 'dart:io';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../app/router/app_router.dart';
+import '../../app/theme/app_theme.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/storage/storage_entry.dart';
 import '../reader/file_opener.dart';
 import '../recents/recents_screen.dart';
+import '../cleaner/cleaner_screen.dart';
+import '../search/search_screen.dart';
+import '../tools/trash_screen.dart';
 import '../../shared/widgets/empty_state.dart';
+import '../../shared/widgets/nexa_logo.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import 'destination_picker.dart';
 import 'category_screen.dart';
+import 'file_actions.dart';
 import 'file_tiles.dart';
 import 'file_operation_service.dart';
 import 'file_rules.dart';
 import 'files_controller.dart';
+import '../operations/operations_controller.dart';
 import '../../app/theme/design_tokens.dart';
 import '../../core/database/app_database.dart';
 import '../../core/trash/trash_service.dart';
+import '../../core/platform/providers.dart';
 import '../../shared/formatters.dart';
 
 class FilesScreen extends ConsumerStatefulWidget {
@@ -27,7 +38,6 @@ class FilesScreen extends ConsumerStatefulWidget {
 
 class _FilesScreenState extends ConsumerState<FilesScreen> {
   bool searching = false;
-  CancellationToken? operationToken;
   late final AppLifecycleListener _lifecycle;
   List<StorageEntry>? _metadataFor;
   Future<Map<String, LibraryRecord>>? _metadata;
@@ -35,6 +45,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   @override
   void initState() {
     super.initState();
+    // Items older than 30 days leave the trash for good.
+    unawaited(
+      TrashService(
+        ref.read(storageRepositoryProvider),
+      ).purgeOlderThan(const Duration(days: 30)).catchError((_) => 0),
+    );
     _lifecycle = AppLifecycleListener(
       onResume: () {
         final state = ref.read(filesControllerProvider);
@@ -56,10 +72,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     final state = ref.watch(filesControllerProvider),
         controller = ref.read(filesControllerProvider.notifier);
     return Scaffold(
-      appBar: _appBar(state, controller),
+      appBar: state.browsing || state.selecting
+          ? _appBar(state, controller)
+          : null,
       body: Column(
         children: [
-          if (state.browsing)
+          if (state.browsing && !state.selecting)
             _Breadcrumb(path: state.path, onTap: controller.goTo),
           if (state.failure != null)
             MaterialBanner(
@@ -71,21 +89,39 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                 ),
               ],
             ),
-          if (!state.browsing) _continueReading(),
           Expanded(
             child: state.loading
-                ? const Center(child: CircularProgressIndicator())
+                ? state.browsing
+                      ? const Center(child: CircularProgressIndicator())
+                      : Column(
+                          children: [
+                            _homeHeader(),
+                            const Expanded(
+                              child: Center(child: CircularProgressIndicator()),
+                            ),
+                          ],
+                        )
                 : state.browsing
                 ? _folder(state, controller)
-                : _roots(state, controller),
+                : _home(state, controller),
           ),
         ],
       ),
       floatingActionButton: state.browsing && !state.selecting
-          ? FloatingActionButton(
-              onPressed: () => _createFolder(controller),
-              tooltip: 'Nouveau dossier',
-              child: const Icon(Icons.create_new_folder_outlined),
+          ? Padding(
+              // The shell's floating dock (and mini player) cover the bottom
+              // of this nested scaffold: lift the button above them.
+              padding: EdgeInsets.only(
+                bottom:
+                    (MediaQuery.paddingOf(context).bottom -
+                            MediaQuery.viewPaddingOf(context).bottom)
+                        .clamp(0, double.infinity),
+              ),
+              child: FloatingActionButton(
+                onPressed: () => _createFolder(controller),
+                tooltip: 'Nouveau dossier',
+                child: const Icon(Icons.create_new_folder_rounded),
+              ),
             )
           : null,
       bottomNavigationBar: state.selecting
@@ -97,36 +133,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   Widget _continueReading() {
     final items = ref.watch(continueReadingProvider).valueOrNull;
     if (items == null || items.isEmpty) return const SizedBox.shrink();
-    final item = items.first;
+    final item = items.first, s = context.surfaces, theme = Theme.of(context);
+    final accent = theme.colorScheme.primary;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+      padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
       child: Card(
-        child: ListTile(
-          leading: SizedBox(
-            width: 52,
-            height: 64,
-            child: item.coverKey == null
-                ? const Icon(Icons.auto_stories, size: 38)
-                : ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: Image.file(
-                      File(item.coverKey!),
-                      fit: BoxFit.cover,
-                      cacheWidth: 160,
-                      errorBuilder: (_, _, _) =>
-                          const Icon(Icons.auto_stories, size: 38),
-                    ),
-                  ),
-          ),
-          title: Text(item.name, maxLines: 1, overflow: TextOverflow.ellipsis),
-          subtitle: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LinearProgressIndicator(value: item.fraction.clamp(0, 1)),
-              Text('${(item.fraction * 100).round()} %'),
-            ],
-          ),
-          trailing: const Text('Continuer'),
+        child: InkWell(
           onTap: () => RecentsScreen.openItem(
             context,
             ref,
@@ -142,6 +154,86 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
               fraction: item.fraction,
             ),
           ),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              children: [
+                SizedBox(
+                  width: 50,
+                  height: 68,
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
+                    child: item.coverKey == null
+                        ? ColoredBox(
+                            color: s.cardAlt,
+                            child: Icon(Icons.auto_stories, color: accent),
+                          )
+                        : Image.file(
+                            File(item.coverKey!),
+                            fit: BoxFit.cover,
+                            cacheWidth: 160,
+                            errorBuilder: (_, _, _) => ColoredBox(
+                              color: s.cardAlt,
+                              child: Icon(Icons.auto_stories, color: accent),
+                            ),
+                          ),
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'REPRENDRE',
+                        style: theme.textTheme.labelSmall?.copyWith(
+                          color: accent,
+                          letterSpacing: 1.2,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        item.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleSmall,
+                      ),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(4),
+                              child: LinearProgressIndicator(
+                                value: item.fraction.clamp(0, 1),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Text(
+                            '${(item.fraction * 100).round()} %',
+                            style: theme.textTheme.labelMedium?.copyWith(
+                              color: s.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                CircleAvatar(
+                  radius: 22,
+                  backgroundColor: accent,
+                  child: Icon(
+                    Icons.play_arrow_rounded,
+                    color: AppTheme.onColor(accent),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );
@@ -154,8 +246,9 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (state.selecting) {
       return AppBar(
         leading: IconButton(
+          tooltip: 'Annuler la sélection',
           onPressed: controller.clearSelection,
-          icon: const Icon(Icons.close),
+          icon: const Icon(Icons.close_rounded),
         ),
         title: Text(
           '${state.selected.length} sélectionné${state.selected.length > 1 ? 's' : ''}',
@@ -164,42 +257,44 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
           IconButton(
             tooltip: 'Tout sélectionner',
             onPressed: controller.selectAll,
-            icon: const Icon(Icons.select_all),
+            icon: const Icon(Icons.select_all_rounded),
           ),
           IconButton(
             tooltip: 'Plus',
             onPressed: () => _selectionMenu(controller),
-            icon: const Icon(Icons.more_vert),
+            icon: const Icon(Icons.more_vert_rounded),
           ),
         ],
       );
     }
     return AppBar(
-      leading: state.browsing
-          ? IconButton(
-              tooltip: 'Retour',
-              onPressed: controller.goBack,
-              icon: const Icon(Icons.arrow_back),
-            )
-          : null,
+      leading: IconButton(
+        tooltip: 'Retour',
+        onPressed: controller.goBack,
+        icon: const Icon(Icons.arrow_back_rounded),
+      ),
+      titleSpacing: 0,
       title: searching
           ? TextField(
               autofocus: true,
               onChanged: controller.search,
               decoration: const InputDecoration(
                 hintText: 'Rechercher dans ce dossier',
-                border: InputBorder.none,
+                prefixIcon: Icon(Icons.search_rounded),
+                isDense: true,
               ),
             )
-          : Text(state.browsing ? state.current!.displayName : 'NexaFiles'),
+          : Text(state.current!.displayName),
       actions: [
-        if (state.browsing)
-          IconButton(
-            tooltip: 'Rechercher',
-            onPressed: () => setState(() => searching = !searching),
-            icon: Icon(searching ? Icons.close : Icons.search),
-          ),
-        if (state.browsing)
+        IconButton(
+          tooltip: searching ? 'Fermer la recherche' : 'Rechercher',
+          onPressed: () {
+            if (searching) controller.search('');
+            setState(() => searching = !searching);
+          },
+          icon: Icon(searching ? Icons.close_rounded : Icons.search_rounded),
+        ),
+        if (!searching) ...[
           IconButton(
             tooltip: state.viewMode == FileViewMode.list
                 ? 'Afficher en grille'
@@ -212,133 +307,245 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
             icon: Icon(
               state.viewMode == FileViewMode.list
                   ? Icons.grid_view_rounded
-                  : Icons.view_list_rounded,
+                  : Icons.view_agenda_outlined,
             ),
           ),
-        if (state.browsing)
           IconButton(
             tooltip: 'Trier : ${_sortLabel(state.sort)}',
             onPressed: () => _sortSheet(state, controller),
-            icon: Badge(
-              label: Icon(
-                state.direction == SortDirection.ascending
-                    ? Icons.arrow_upward
-                    : Icons.arrow_downward,
-                size: 10,
-              ),
-              child: const Icon(Icons.sort),
-            ),
+            icon: const Icon(Icons.swap_vert_rounded),
           ),
-        if (state.browsing)
           PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert_rounded),
             onSelected: (v) => _menu(v, state, controller),
             itemBuilder: (_) => [
               const PopupMenuItem(
                 value: 'folder',
-                child: Text('Nouveau dossier'),
+                child: ListTile(
+                  leading: Icon(Icons.create_new_folder_outlined),
+                  title: Text('Nouveau dossier'),
+                ),
               ),
-              const PopupMenuItem(value: 'refresh', child: Text('Actualiser')),
+              const PopupMenuItem(
+                value: 'refresh',
+                child: ListTile(
+                  leading: Icon(Icons.refresh_rounded),
+                  title: Text('Actualiser'),
+                ),
+              ),
             ],
           ),
+        ],
+        const SizedBox(width: 4),
       ],
     );
   }
 
-  Widget _roots(FileManagerState state, FilesController controller) {
-    if (state.hasAccess == false) {
-      return EmptyState(
-        icon: Icons.folder_open,
-        title: 'Autorisez l’accès à vos fichiers',
-        message:
-            'NexaFiles a besoin de l’accès à tous les fichiers pour parcourir votre stockage comme un gestionnaire de fichiers. Tout reste sur votre appareil.',
-        action: FilledButton.icon(
-          onPressed: controller.requestAccess,
-          icon: const Icon(Icons.lock_open_rounded),
-          label: const Text('Autoriser l’accès'),
+  String _greeting() {
+    final hour = DateTime.now().hour;
+    return hour < 5 || hour >= 18 ? 'Bonsoir' : 'Bonjour';
+  }
+
+  Widget _homeHeader() => SafeArea(
+    bottom: false,
+    child: Column(
+      children: [
+        PageHeader(
+          eyebrow: _greeting(),
+          title: const _Wordmark(),
+          actions: [
+            RoundIconButton(
+              icon: Icons.settings_outlined,
+              tooltip: 'Paramètres',
+              onPressed: () => Navigator.pushNamed(context, AppRoutes.settings),
+            ),
+          ],
         ),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 4, 16, 4),
+          child: _SearchLauncher(
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _home(FileManagerState state, FilesController controller) {
+    final header = _homeHeader();
+    if (state.hasAccess == false) {
+      return Column(
+        children: [
+          header,
+          Expanded(
+            child: EmptyState(
+              icon: Icons.folder_open_rounded,
+              title: 'Autorisez l’accès à vos fichiers',
+              message:
+                  'NexaFiles a besoin de l’accès à tous les fichiers pour parcourir votre stockage comme un gestionnaire de fichiers. Tout reste sur votre appareil.',
+              action: FilledButton.icon(
+                onPressed: controller.requestAccess,
+                icon: const Icon(Icons.lock_open_rounded),
+                label: const Text('Autoriser l’accès'),
+              ),
+            ),
+          ),
+        ],
       );
     }
-    final titleStyle = Theme.of(
-      context,
-    ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w700);
     final stats = ref.watch(categoryStatsProvider).valueOrNull ?? const {};
+    final primary =
+        state.roots.where((r) => r.primary).firstOrNull ??
+        state.roots.firstOrNull;
+    final storage = <Widget>[
+      if (primary != null)
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+          child: _StorageHero(
+            root: primary,
+            onTap: () => controller.openRoot(primary),
+          ),
+        ),
+      for (final root in state.roots.where((r) => r != primary))
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+          child: _LocationCard(
+            root: root,
+            onTap: () => controller.openRoot(root),
+          ),
+        ),
+      Padding(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
+        child: Card(
+          child: ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 14),
+            leading: IconBubble(
+              icon: Icons.cleaning_services_rounded,
+              color: AppColors.image,
+              size: 42,
+            ),
+            title: const Text('Libérer de l’espace'),
+            subtitle: const Text(
+              'Gros fichiers, doublons, APK, dossiers vides',
+            ),
+            trailing: const Icon(Icons.chevron_right_rounded),
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CleanerScreen()),
+            ),
+          ),
+        ),
+      ),
+      _continueReading(),
+    ];
+    final browse = <Widget>[
+      const SectionTitle('Catégories'),
+      Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 16),
+        child: GridView.count(
+          crossAxisCount: 4,
+          shrinkWrap: true,
+          padding: EdgeInsets.zero,
+          physics: const NeverScrollableScrollPhysics(),
+          mainAxisSpacing: 10,
+          crossAxisSpacing: 10,
+          childAspectRatio: .78,
+          children: [
+            for (final category in categories)
+              _CategoryTile(
+                icon: category.icon,
+                color: category.color,
+                label: category.label,
+                count: stats[category.key]?.count,
+                onTap: () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (_) => CategoryScreen(category: category),
+                  ),
+                ),
+              ),
+            _CategoryTile(
+              icon: Icons.delete_outline_rounded,
+              color: context.surfaces.muted,
+              label: 'Corbeille',
+              onTap: () => Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const TrashScreen()),
+              ),
+            ),
+          ],
+        ),
+      ),
+      if (state.quickFolders.isNotEmpty) ...[
+        const SectionTitle('Accès rapides'),
+        _QuickRow(
+          children: [
+            for (final folder in state.quickFolders)
+              _QuickAccess(
+                icon: _quickIcon(folder.folderName).$1,
+                label: folder.label,
+                color: _quickIcon(folder.folderName).$2,
+                onTap: () => controller.openDirectory(folder.entry),
+              ),
+          ],
+        ),
+      ],
+      if (state.favorites.isNotEmpty) ...[
+        const SectionTitle('Favoris'),
+        _QuickRow(
+          children: [
+            for (final folder in state.favorites)
+              _QuickAccess(
+                icon: Icons.star_rounded,
+                label: folder.displayName,
+                color: AppColors.folder,
+                onTap: () => controller.openDirectory(folder),
+              ),
+          ],
+        ),
+      ],
+    ];
     return RefreshIndicator(
       onRefresh: () async {
         ref.invalidate(categoryStatsProvider);
         await controller.loadRoots();
       },
-      child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 96),
-        children: [
-          Text('Stockage', style: titleStyle),
-          const SizedBox(height: 12),
-          for (final root in state.roots)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: _LocationCard(
-                root: root,
-                onTap: () => controller.openRoot(root),
-              ),
-            ),
-          const SizedBox(height: 16),
-          Text('Catégories', style: titleStyle),
-          const SizedBox(height: 12),
-          GridView.count(
-            crossAxisCount: 4,
-            shrinkWrap: true,
-            physics: const NeverScrollableScrollPhysics(),
-            mainAxisSpacing: 8,
-            crossAxisSpacing: 8,
-            childAspectRatio: .82,
-            children: [
-              for (final category in categories)
-                _CategoryTile(
-                  category: category,
-                  count: stats[category.key]?.count,
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CategoryScreen(category: category),
-                    ),
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 24),
-          Text('Accès rapides', style: titleStyle),
-          const SizedBox(height: 12),
-          Wrap(
-            spacing: 10,
-            runSpacing: 10,
-            children: [
-              for (final folder in state.quickFolders)
-                _QuickAccess(
-                  icon: _quickIcon(folder.folderName).$1,
-                  label: folder.label,
-                  color: _quickIcon(folder.folderName).$2,
-                  onTap: () => controller.openDirectory(folder.entry),
-                ),
-            ],
-          ),
-          if (state.favorites.isNotEmpty) ...[
-            const SizedBox(height: 28),
-            Text('Favoris', style: titleStyle),
-            const SizedBox(height: 12),
-            Wrap(
-              spacing: 10,
-              runSpacing: 10,
+      // Landscape / tablets: storage on the left, browsing on the right,
+      // instead of one stretched column.
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final wide = constraints.maxWidth >= 720;
+          return SafeArea(
+            top: false,
+            bottom: false,
+            child: ListView(
+              padding: EdgeInsets.only(bottom: dockInset(context)),
               children: [
-                for (final folder in state.favorites)
-                  _QuickAccess(
-                    icon: Icons.star_rounded,
-                    label: folder.displayName,
-                    color: Colors.amber.shade800,
-                    onTap: () => controller.openDirectory(folder),
+                header,
+                if (!wide) ...[
+                  ...storage,
+                  ...browse,
+                ] else
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 5, child: Column(children: storage)),
+                      Expanded(
+                        flex: 6,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: browse,
+                        ),
+                      ),
+                    ],
                   ),
               ],
             ),
-          ],
-        ],
+          );
+        },
       ),
     );
   }
@@ -391,7 +598,10 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
           onRefresh: controller.refresh,
           child: state.viewMode == FileViewMode.list
               ? ListView.builder(
-                  padding: const EdgeInsets.only(bottom: 88),
+                  padding: EdgeInsets.only(
+                    top: 4,
+                    bottom: dockInset(context) + 64,
+                  ),
                   itemCount: entries.length,
                   itemBuilder: (_, i) => FileTile(
                     entry: entries[i],
@@ -404,7 +614,12 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
                   ),
                 )
               : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(12, 12, 12, 88),
+                  padding: EdgeInsets.fromLTRB(
+                    12,
+                    8,
+                    12,
+                    dockInset(context) + 64,
+                  ),
                   gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                     maxCrossAxisExtent: 180,
                     childAspectRatio: .78,
@@ -425,35 +640,79 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     );
   }
 
-  Widget _selectionBar(FileManagerState state, FilesController controller) =>
-      SafeArea(
-        child: NavigationBar(
-          destinations: const [
-            NavigationDestination(
-              icon: Icon(Icons.copy_outlined),
-              label: 'Copier',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.drive_file_move_outlined),
-              label: 'Déplacer',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.share_outlined),
-              label: 'Partager',
-            ),
-            NavigationDestination(
-              icon: Icon(Icons.delete_outline),
-              label: 'Supprimer',
-            ),
-          ],
-          onDestinationSelected: (i) {
-            if (i == 0) _transfer(controller, false);
-            if (i == 1) _transfer(controller, true);
-            if (i == 2) _share(controller);
-            if (i == 3) _delete(controller);
-          },
+  /// Floating ink bar replacing the dock while items are selected.
+  Widget _selectionBar(FileManagerState state, FilesController controller) {
+    final s = context.surfaces;
+    Widget action(IconData icon, String label, VoidCallback onTap) => Expanded(
+      child: Semantics(
+        button: true,
+        label: label,
+        excludeSemantics: true,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(AppRadius.pill),
+          onTap: onTap,
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(icon, color: s.canvas, size: 22),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                style: TextStyle(
+                  fontFamily: AppFonts.body,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: s.canvas.withValues(alpha: .85),
+                ),
+              ),
+            ],
+          ),
         ),
-      );
+      ),
+    );
+    return SafeArea(
+      top: false,
+      minimum: const EdgeInsets.fromLTRB(16, 0, 16, 12),
+      child: Material(
+        color: s.ink,
+        elevation: 8,
+        shadowColor: Colors.black45,
+        shape: const StadiumBorder(),
+        child: SizedBox(
+          height: 66,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            child: Row(
+              children: [
+                action(
+                  Icons.copy_rounded,
+                  'Copier',
+                  () => _transfer(controller, false),
+                ),
+                action(
+                  Icons.drive_file_move_rounded,
+                  'Déplacer',
+                  () => _transfer(controller, true),
+                ),
+                action(
+                  Icons.ios_share_rounded,
+                  'Partager',
+                  () => _share(controller),
+                ),
+                action(
+                  Icons.delete_outline_rounded,
+                  'Supprimer',
+                  () => _delete(controller),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Future<void> _tap(
     StorageEntry entry,
     FileManagerState state,
@@ -498,17 +757,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     }
   }
 
-  Future<void> _rename(StorageEntry entry, FilesController controller) async {
-    final value = await _nameDialog('Renommer', entry.displayName);
-    if (value == null || value == entry.displayName) return;
-    try {
-      await controller.rename(entry, value);
-      _message('Élément renommé');
-    } catch (e) {
-      _error(e);
-    }
-  }
-
   Future<String?> _nameDialog(String title, String initial) async {
     final input = TextEditingController(text: initial);
     return showDialog<String>(
@@ -530,123 +778,32 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     );
   }
 
+  FileActions _actions(FilesController controller) => FileActions(
+    context,
+    ref,
+    onChanged: () async {
+      await controller.refresh();
+      controller.clearSelection();
+    },
+  );
+
   void _entryAction(
     String action,
     StorageEntry entry,
     FilesController controller,
   ) {
-    if (action == 'rename') _rename(entry, controller);
-    if (action == 'favorite') controller.toggleFavorite(entry);
-    if (action == 'info') _info(entry);
-    if (action == 'open') {
-      controller.storage
-          .openExternal(entry.uri, mimeType: entry.mimeType)
-          .catchError(_error);
-    }
-    if (action == 'delete') {
-      _delete(controller, [entry]);
-    }
-  }
-
-  /// Trashes [only] when given (single-entry menu), else the visible selection.
-  Future<void> _delete(
-    FilesController controller, [
-    List<StorageEntry>? only,
-  ]) async {
-    final entries = only ?? controller.selectedEntries,
-        state = ref.read(filesControllerProvider);
-    if (entries.isEmpty || state.current == null || state.path.isEmpty) return;
-    final yes =
-        await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(
-              entries.length == 1
-                  ? 'Mettre « ${entries.first.displayName} » à la corbeille ?'
-                  : 'Mettre ${entries.length} éléments à la corbeille ?',
-            ),
-            content: const Text(
-              'Les fichiers compatibles pourront être restaurés depuis Outils > Corbeille.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Annuler'),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Mettre à la corbeille'),
-              ),
-            ],
-          ),
-        ) ??
-        false;
-    if (!yes) return;
-    final trash = TrashService(controller.storage), failed = <StorageEntry>[];
-    var moved = 0;
-    for (final entry in entries) {
-      if (await trash.moveToTrash(
-        entry,
-        state.current!.uri,
-        state.path.first.entry.uri,
-      )) {
-        moved++;
-      } else {
-        failed.add(entry);
-      }
-    }
-    if (failed.isNotEmpty && mounted) {
-      final permanent =
-          await showDialog<bool>(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: Text('${failed.length} élément(s) non déplaçable(s)'),
-              content: const Text(
-                'Ces éléments ne peuvent pas être mis dans la corbeille. Voulez-vous les supprimer définitivement ?',
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.pop(context, false),
-                  child: const Text('Conserver'),
-                ),
-                FilledButton(
-                  onPressed: () => Navigator.pop(context, true),
-                  child: const Text('Supprimer définitivement'),
-                ),
-              ],
-            ),
-          ) ??
-          false;
-      if (permanent) {
-        final result = await FileOperationService(
-          controller.storage,
-        ).deleteAll(failed);
-        moved += result.succeeded;
-      }
-    }
-    await controller.refresh();
-    controller.clearSelection();
-    _message('$moved élément(s) traité(s)');
-  }
-
-  Future<void> _share(FilesController controller) async {
-    final entries = controller.selectedEntries
-        .where((e) => e.kind == StorageEntryKind.file)
-        .toList();
-    if (entries.isEmpty) {
-      _error('Sélectionnez au moins un fichier.');
+    if (action == 'favorite') {
+      controller.toggleFavorite(entry);
       return;
     }
-    try {
-      await controller.storage.share(
-        entries.map((e) => e.uri).toList(),
-        mimeType: entries.length == 1 ? entries.first.mimeType : null,
-      );
-      controller.clearSelection();
-    } catch (e) {
-      _error(e);
-    }
+    _actions(controller).handle(action, entry);
   }
+
+  Future<void> _delete(FilesController controller) =>
+      _actions(controller).delete(controller.selectedEntries);
+
+  Future<void> _share(FilesController controller) =>
+      _actions(controller).share(controller.selectedEntries);
 
   Future<void> _transfer(FilesController controller, bool move) async {
     final sources = controller.selectedEntries;
@@ -663,26 +820,34 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     if (target == null) return;
     final policy = await _conflictDialog();
     if (policy == null) return;
-    operationToken = CancellationToken();
-    if (!mounted) return;
-    showDialog(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => _OperationDialog(
-        stream: FileOperationService(controller.storage).transfer(
-          sources: sources,
+    final count = sources.length;
+    ref
+        .read(operationsProvider)
+        .start(
+          kind: move ? OperationKind.move : OperationKind.copy,
+          title:
+              '${move ? 'Déplacement' : 'Copie'} de '
+              '${count == 1 ? '« ${sources.first.displayName} »' : '$count éléments'}',
           destination: target,
-          move: move,
-          conflict: policy,
-          cancellation: operationToken!,
-        ),
-        onCancel: operationToken!.cancel,
-        onDone: () {
-          Navigator.pop(dialogContext);
-          controller.refresh();
-        },
-      ),
-    );
+          run: (token) => FileOperationService(controller.storage)
+              .transfer(
+                sources: sources,
+                destination: target,
+                move: move,
+                conflict: policy,
+                cancellation: token,
+              )
+              .map(
+                (p) => OperationProgress(
+                  done: p.completed,
+                  total: p.total,
+                  current: p.currentName,
+                  finished: p.done,
+                ),
+              ),
+          onDone: controller.refresh,
+        );
+    controller.clearSelection();
   }
 
   Future<ConflictPolicy?> _conflictDialog() => showDialog<ConflictPolicy>(
@@ -711,12 +876,32 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
           shrinkWrap: true,
           children: [
             ListTile(
+              leading: const Icon(Icons.archive_outlined),
+              title: const Text('Compresser…'),
+              onTap: () {
+                Navigator.pop(context);
+                _actions(controller).compress(controller.selectedEntries);
+              },
+            ),
+            if (controller.selectedEntries.length == 1 &&
+                isExtractable(controller.selectedEntries.first))
+              ListTile(
+                leading: const Icon(Icons.unarchive_outlined),
+                title: const Text('Extraire dans un dossier'),
+                onTap: () {
+                  Navigator.pop(context);
+                  _actions(
+                    controller,
+                  ).handle('extract_folder', controller.selectedEntries.first);
+                },
+              ),
+            ListTile(
               leading: const Icon(Icons.info_outline),
               title: const Text('Informations'),
               enabled: controller.selectedEntries.length == 1,
               onTap: () {
                 Navigator.pop(context);
-                _info(controller.selectedEntries.first);
+                showFileInfo(context, controller.selectedEntries.first);
               },
             ),
             ListTile(
@@ -740,68 +925,6 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
     );
   }
 
-  void _info(StorageEntry entry) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                entry.displayName,
-                style: Theme.of(context).textTheme.titleLarge,
-              ),
-              const SizedBox(height: 16),
-              _detail(
-                'Type',
-                entry.kind == StorageEntryKind.directory
-                    ? 'Dossier'
-                    : entry.mimeType ?? 'Fichier inconnu',
-              ),
-              _detail(
-                'Taille',
-                entry.kind == StorageEntryKind.directory
-                    ? 'Non calculée'
-                    : formatBytes(entry.size),
-              ),
-              _detail(
-                'Modification',
-                entry.modifiedAt?.toLocal().toString() ?? 'Inconnue',
-              ),
-              const ExpansionTile(
-                title: Text('Informations avancées'),
-                children: [],
-              ),
-              SelectableText(
-                '${entry.uri}',
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
-  Widget _detail(String label, String value) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 5),
-    child: Row(
-      children: [
-        SizedBox(
-          width: 110,
-          child: Text(
-            label,
-            style: const TextStyle(fontWeight: FontWeight.w600),
-          ),
-        ),
-        Expanded(child: Text(value)),
-      ],
-    ),
-  );
   void _sortSheet(FileManagerState state, FilesController controller) {
     showModalBottomSheet(
       context: context,
@@ -861,26 +984,291 @@ class _FilesScreenState extends ConsumerState<FilesScreen> {
   );
 }
 
+/// "NexaFiles" with the accent on the second half.
+class _Wordmark extends StatelessWidget {
+  const _Wordmark();
+  @override
+  Widget build(BuildContext context) => Row(
+    mainAxisSize: MainAxisSize.min,
+    children: [
+      const NexaLogo(size: 34),
+      const SizedBox(width: 10),
+      Flexible(
+        child: Text.rich(
+          TextSpan(
+            text: 'Nexa',
+            children: [
+              TextSpan(
+                text: 'Files',
+                style: TextStyle(color: Theme.of(context).colorScheme.primary),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ],
+  );
+}
+
 class _Breadcrumb extends StatelessWidget {
   const _Breadcrumb({required this.path, required this.onTap});
   final List<NavigationNode> path;
   final ValueChanged<int> onTap;
   @override
-  Widget build(BuildContext context) => SizedBox(
-    height: 48,
-    child: ListView.separated(
-      scrollDirection: Axis.horizontal,
-      padding: const EdgeInsets.symmetric(horizontal: 12),
-      itemCount: path.length,
-      separatorBuilder: (_, _) => const Icon(Icons.chevron_right, size: 18),
-      itemBuilder: (_, i) => TextButton(
-        onPressed: () => onTap(i),
-        child: Text(path[i].entry.displayName, maxLines: 1),
+  Widget build(BuildContext context) {
+    final s = context.surfaces, accent = context.accent;
+    return SizedBox(
+      height: 44,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        reverse: false,
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 6),
+        itemCount: path.length,
+        separatorBuilder: (_, _) =>
+            Icon(Icons.chevron_right_rounded, size: 18, color: s.muted),
+        itemBuilder: (_, i) {
+          final last = i == path.length - 1;
+          return Material(
+            color: last ? accent.withValues(alpha: .14) : s.card,
+            shape: StadiumBorder(
+              side: BorderSide(color: last ? Colors.transparent : s.line),
+            ),
+            child: InkWell(
+              customBorder: const StadiumBorder(),
+              onTap: () => onTap(i),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Center(
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      if (i == 0) ...[
+                        Icon(
+                          Icons.smartphone_rounded,
+                          size: 15,
+                          color: last ? accent : s.muted,
+                        ),
+                        const SizedBox(width: 5),
+                      ],
+                      Text(
+                        path[i].entry.displayName,
+                        maxLines: 1,
+                        style: TextStyle(
+                          fontFamily: AppFonts.body,
+                          fontSize: 13,
+                          fontWeight: last ? FontWeight.w800 : FontWeight.w600,
+                          color: last ? accent : s.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          );
+        },
       ),
+    );
+  }
+}
+
+/// The primary volume, shown as a bold accent card with a usage ring.
+class _StorageHero extends StatelessWidget {
+  const _StorageHero({required this.root, required this.onTap});
+  final RootLocation root;
+  final VoidCallback onTap;
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), accent = theme.colorScheme.primary;
+    final total = root.totalBytes, free = root.freeBytes;
+    final used = total != null && free != null ? total - free : null;
+    final fraction = used != null && total! > 0 ? used / total : null;
+    final on = AppTheme.onColor(accent);
+    final hsl = HSLColor.fromColor(accent);
+    final deep = hsl
+        .withLightness((hsl.lightness - .18).clamp(0, 1))
+        .withHue((hsl.hue + 18) % 360)
+        .toColor();
+    return Material(
+      borderRadius: BorderRadius.circular(AppRadius.lg),
+      clipBehavior: Clip.antiAlias,
+      child: Ink(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [accent, deep],
+          ),
+        ),
+        child: InkWell(
+          onTap: onTap,
+          child: Stack(
+            children: [
+              // Decorative rings.
+              Positioned(
+                right: -40,
+                top: -50,
+                child: _Ring(size: 180, color: on.withValues(alpha: .08)),
+              ),
+              Positioned(
+                left: -30,
+                bottom: -70,
+                child: _Ring(size: 140, color: on.withValues(alpha: .06)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                root.removable
+                                    ? Icons.sd_card_rounded
+                                    : Icons.smartphone_rounded,
+                                size: 16,
+                                color: on.withValues(alpha: .85),
+                              ),
+                              const SizedBox(width: 6),
+                              Flexible(
+                                child: Text(
+                                  root.name,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.labelLarge?.copyWith(
+                                    color: on.withValues(alpha: .9),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 10),
+                          Text(
+                            fraction == null
+                                ? 'Parcourir'
+                                : '${(fraction * 100).round()} %',
+                            style: theme.textTheme.displaySmall?.copyWith(
+                              color: on,
+                              fontSize: 42,
+                              height: 1,
+                            ),
+                          ),
+                          if (fraction != null) ...[
+                            Text(
+                              'utilisés',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                color: on.withValues(alpha: .8),
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: on.withValues(alpha: .16),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.pill,
+                                ),
+                              ),
+                              child: Text(
+                                '${formatBytes(free)} libres sur ${formatBytes(total)}',
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: theme.textTheme.labelMedium?.copyWith(
+                                  color: on,
+                                  fontWeight: FontWeight.w700,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    SizedBox(
+                      width: 96,
+                      height: 96,
+                      child: CustomPaint(
+                        painter: _GaugePainter(
+                          value: fraction ?? 0,
+                          track: on.withValues(alpha: .18),
+                          color: on,
+                        ),
+                        child: Center(
+                          child: Icon(
+                            Icons.arrow_outward_rounded,
+                            color: on,
+                            size: 30,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Ring extends StatelessWidget {
+  const _Ring({required this.size, required this.color});
+  final double size;
+  final Color color;
+  @override
+  Widget build(BuildContext context) => Container(
+    width: size,
+    height: size,
+    decoration: BoxDecoration(
+      shape: BoxShape.circle,
+      border: Border.all(color: color, width: 22),
     ),
   );
 }
 
+class _GaugePainter extends CustomPainter {
+  _GaugePainter({
+    required this.value,
+    required this.track,
+    required this.color,
+  });
+  final double value;
+  final Color track, color;
+  @override
+  void paint(Canvas canvas, Size size) {
+    const stroke = 10.0;
+    final rect = (Offset.zero & size).deflate(stroke / 2);
+    const start = math.pi * .75, sweep = math.pi * 1.5;
+    final paint = Paint()
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = stroke
+      ..strokeCap = StrokeCap.round;
+    canvas.drawArc(rect, start, sweep, false, paint..color = track);
+    if (value > 0) {
+      canvas.drawArc(
+        rect,
+        start,
+        sweep * value.clamp(0, 1),
+        false,
+        paint..color = color,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(_GaugePainter old) =>
+      old.value != value || old.color != color || old.track != track;
+}
+
+/// Secondary volumes (SD card, USB…).
 class _LocationCard extends StatelessWidget {
   const _LocationCard({required this.root, required this.onTap});
   final RootLocation root;
@@ -889,26 +1277,22 @@ class _LocationCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final total = root.totalBytes, free = root.freeBytes;
     final used = total != null && free != null ? total - free : null;
-    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     return Card(
       child: InkWell(
-        borderRadius: BorderRadius.circular(AppRadius.md),
         onTap: onTap,
         child: Padding(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(14),
           child: Row(
             children: [
-              CircleAvatar(
-                radius: 24,
-                backgroundColor: colors.primaryContainer,
-                child: Icon(
-                  root.removable
-                      ? Icons.sd_card_rounded
-                      : Icons.phone_android_rounded,
-                  color: colors.onPrimaryContainer,
-                ),
+              IconBubble(
+                icon: root.removable
+                    ? Icons.sd_card_rounded
+                    : Icons.smartphone_rounded,
+                color: theme.colorScheme.primary,
+                size: 44,
               ),
-              const SizedBox(width: 16),
+              const SizedBox(width: 14),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -917,23 +1301,27 @@ class _LocationCard extends StatelessWidget {
                       root.name,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w700),
+                      style: theme.textTheme.titleSmall,
                     ),
                     if (used != null && total! > 0) ...[
                       const SizedBox(height: 8),
-                      LinearProgressIndicator(value: used / total),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(value: used / total),
+                      ),
                       const SizedBox(height: 6),
                       Text(
-                        '${formatBytes(used)} utilisés sur ${formatBytes(total)} • ${formatBytes(free)} libres',
+                        '${formatBytes(free)} disponibles sur ${formatBytes(total)}',
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.bodySmall,
+                        style: theme.textTheme.bodySmall,
                       ),
                     ],
                   ],
                 ),
               ),
-              const Icon(Icons.chevron_right),
+              const SizedBox(width: 8),
+              Icon(Icons.chevron_right_rounded, color: context.surfaces.muted),
             ],
           ),
         ),
@@ -944,50 +1332,68 @@ class _LocationCard extends StatelessWidget {
 
 class _CategoryTile extends StatelessWidget {
   const _CategoryTile({
-    required this.category,
-    required this.count,
+    required this.icon,
+    required this.color,
+    required this.label,
     required this.onTap,
+    this.count,
   });
-  final CategoryInfo category;
+  final IconData icon;
+  final Color color;
+  final String label;
   final int? count;
   final VoidCallback onTap;
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return InkWell(
-      borderRadius: BorderRadius.circular(AppRadius.sm),
-      onTap: onTap,
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Container(
-            width: 52,
-            height: 52,
-            decoration: BoxDecoration(
-              color: category.color.withValues(
-                alpha: theme.brightness == Brightness.light ? .14 : .24,
+    return Card(
+      child: InkWell(
+        onTap: onTap,
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(6, 12, 6, 8),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconBubble(icon: icon, color: color, size: 42),
+              const Spacer(),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  style: theme.textTheme.labelMedium?.copyWith(
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
               ),
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Icon(category.icon, color: category.color, size: 28),
+              Text(
+                count == null ? ' ' : '$count',
+                style: theme.textTheme.labelSmall?.copyWith(
+                  color: context.surfaces.muted,
+                ),
+              ),
+            ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            category.label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: theme.textTheme.labelMedium,
-          ),
-          Text(
-            count == null ? ' ' : '$count',
-            style: theme.textTheme.labelSmall?.copyWith(
-              color: theme.colorScheme.onSurfaceVariant,
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }
+}
+
+class _QuickRow extends StatelessWidget {
+  const _QuickRow({required this.children});
+  final List<Widget> children;
+  @override
+  Widget build(BuildContext context) => SizedBox(
+    height: 104,
+    child: ListView.separated(
+      scrollDirection: Axis.horizontal,
+      padding: const EdgeInsets.symmetric(horizontal: 16),
+      itemCount: children.length,
+      separatorBuilder: (_, _) => const SizedBox(width: 10),
+      itemBuilder: (_, i) => children[i],
+    ),
+  );
 }
 
 class _QuickAccess extends StatelessWidget {
@@ -1005,78 +1411,77 @@ class _QuickAccess extends StatelessWidget {
   Widget build(BuildContext context) => Semantics(
     button: true,
     label: label,
-    child: ActionChip(
-      onPressed: onTap,
-      avatar: Icon(icon, color: color),
-      label: Text(label),
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 10),
+    excludeSemantics: true,
+    child: SizedBox(
+      width: 112,
+      child: Card(
+        child: InkWell(
+          onTap: onTap,
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                IconBubble(icon: icon, color: color, size: 38),
+                const Spacer(),
+                Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: Theme.of(context).textTheme.labelLarge,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     ),
   );
 }
 
-class _OperationDialog extends StatefulWidget {
-  const _OperationDialog({
-    required this.stream,
-    required this.onCancel,
-    required this.onDone,
-  });
-  final Stream<FileOperationProgress> stream;
-  final VoidCallback onCancel, onDone;
+/// Looks like a search field; opens the global search.
+class _SearchLauncher extends StatelessWidget {
+  const _SearchLauncher({required this.onTap});
+  final VoidCallback onTap;
   @override
-  State<_OperationDialog> createState() => _OperationDialogState();
-}
-
-class _OperationDialogState extends State<_OperationDialog> {
-  FileOperationProgress? progress;
-  Object? error;
-  StreamSubscription? subscription;
-  @override
-  void initState() {
-    super.initState();
-    subscription = widget.stream.listen(
-      (p) {
-        if (p.done) {
-          widget.onDone();
-        } else if (mounted) {
-          setState(() => progress = p);
-        }
-      },
-      onError: (e) {
-        if (mounted) setState(() => error = e);
-      },
+  Widget build(BuildContext context) {
+    final s = context.surfaces;
+    return Semantics(
+      button: true,
+      label: 'Rechercher dans tout le stockage',
+      excludeSemantics: true,
+      child: Material(
+        color: s.cardAlt,
+        shape: const StadiumBorder(),
+        child: InkWell(
+          customBorder: const StadiumBorder(),
+          onTap: onTap,
+          child: SizedBox(
+            height: 48,
+            child: Row(
+              children: [
+                const SizedBox(width: 16),
+                Icon(Icons.search_rounded, color: s.muted),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    'Rechercher dans tout le stockage',
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontFamily: AppFonts.body,
+                      fontSize: 15,
+                      color: s.muted,
+                    ),
+                  ),
+                ),
+                Icon(Icons.tune_rounded, color: s.muted, size: 20),
+                const SizedBox(width: 16),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
-
-  @override
-  void dispose() {
-    subscription?.cancel();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) => AlertDialog(
-    title: Text(
-      progress?.kind == FileOperationKind.move ? 'Déplacement' : 'Copie',
-    ),
-    content: error != null
-        ? Text('$error')
-        : Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              LinearProgressIndicator(value: progress?.fraction),
-              const SizedBox(height: 12),
-              Text(progress?.currentName ?? 'Préparation…'),
-            ],
-          ),
-    actions: [
-      TextButton(
-        onPressed: () {
-          widget.onCancel();
-          Navigator.pop(context);
-        },
-        child: const Text('Annuler'),
-      ),
-    ],
-  );
 }

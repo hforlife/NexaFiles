@@ -19,10 +19,14 @@ class ArchiveEntry {
     required this.compressedSize,
     required this.uncompressedSize,
     required this.isDirectory,
+    this.encrypted = false,
   });
   final String path;
   final int compressedSize, uncompressedSize;
   final bool isDirectory;
+
+  /// Needs a password to be read.
+  final bool encrypted;
   String get name =>
       path.split('/').where((e) => e.isNotEmpty).lastOrNull ?? path;
 }
@@ -37,10 +41,14 @@ abstract interface class ArchiveSession {
 abstract interface class ArchiveAdapter {
   ArchiveCapabilities get capabilities;
   bool supports(DetectedFormat format);
+
+  /// [password] decrypts protected archives; ignored by formats without
+  /// encryption support.
   Future<ArchiveSession> open(
     ContentSource source,
-    ArchiveSafetyPolicy safetyPolicy,
-  );
+    ArchiveSafetyPolicy safetyPolicy, {
+    String? password,
+  });
 }
 
 class ArchiveRegistry {
@@ -59,9 +67,10 @@ class ArchiveRegistry {
     ContentSource source,
     DetectedFormat format, {
     ArchiveSafetyPolicy safetyPolicy = const ArchiveSafetyPolicy(),
+    String? password,
   }) async {
     final adapter = find(format);
     if (adapter == null) throw StateError('Archive non prise en charge');
-    return adapter.open(source, safetyPolicy);
+    return adapter.open(source, safetyPolicy, password: password);
   }
 }

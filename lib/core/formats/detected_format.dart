@@ -1,4 +1,17 @@
-enum ContainerFormat { none, zip, rar, sevenZip }
+enum ContainerFormat {
+  none,
+  zip,
+  rar,
+  sevenZip,
+
+  /// Plain tarball (.tar).
+  tar,
+
+  /// gzip / bzip2 / xz streams: a compressed tarball or a single file.
+  gzip,
+  bzip2,
+  xz,
+}
 
 enum ContentKind {
   pdf,

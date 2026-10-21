@@ -1,5 +1,8 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../app/theme/design_tokens.dart';
+import '../../shared/formatters.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import '../../core/archives/archive_core.dart';
 import '../../core/storage/storage_repository.dart';
 import '../files/destination_picker.dart';
@@ -92,16 +95,23 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
                   itemCount: shown.length,
                   itemBuilder: (_, i) {
                     final item = shown[i];
+                    final category = item.virtualDirectory
+                        ? FileCategory.folder
+                        : FileCategory.fromExtension(
+                            item.name.contains('.')
+                                ? item.name.split('.').last
+                                : null,
+                          );
                     return ListTile(
-                      leading: Icon(
-                        item.virtualDirectory
-                            ? Icons.folder_outlined
-                            : Icons.insert_drive_file_outlined,
+                      leading: IconBubble(
+                        icon: category.icon,
+                        color: category.color,
+                        size: 42,
                       ),
                       title: Text(item.name),
                       subtitle: item.entry == null
                           ? null
-                          : Text('${item.entry!.uncompressedSize} octets'),
+                          : Text(formatBytes(item.entry!.uncompressedSize)),
                       onTap: item.virtualDirectory
                           ? () => setState(
                               () => prefix = prefix.isEmpty
@@ -112,6 +122,7 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
                       trailing: item.entry == null
                           ? null
                           : PopupMenuButton<String>(
+                              icon: const Icon(Icons.more_horiz_rounded),
                               onSelected: (v) {
                                 if (v == 'extract') {
                                   _chooseAndExtract(item.entry);
@@ -175,7 +186,7 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
         children: [
           ListTile(
             title: Text(entry.path),
-            subtitle: Text('${entry.uncompressedSize} octets'),
+            subtitle: Text(formatBytes(entry.uncompressedSize)),
           ),
           ListTile(
             leading: const Icon(Icons.file_download_outlined),
@@ -231,7 +242,7 @@ class _ArchiveBrowserScreenState extends State<ArchiveBrowserScreen> {
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (dialog) => _ExtractionDialog(
+      builder: (dialog) => ExtractionDialog(
         stream: ArchiveExtractionService(
           widget.storage,
         ).extract(widget.session, destination, only: only, cancellation: token),
@@ -254,8 +265,10 @@ class _BrowserItem {
   final ArchiveEntry? entry;
 }
 
-class _ExtractionDialog extends StatefulWidget {
-  const _ExtractionDialog({
+/// Progress of an extraction, with cancel; [done] runs on success.
+class ExtractionDialog extends StatefulWidget {
+  const ExtractionDialog({
+    super.key,
     required this.stream,
     required this.cancel,
     required this.done,
@@ -263,10 +276,10 @@ class _ExtractionDialog extends StatefulWidget {
   final Stream<ExtractionProgress> stream;
   final VoidCallback cancel, done;
   @override
-  State<_ExtractionDialog> createState() => _ExtractionDialogState();
+  State<ExtractionDialog> createState() => ExtractionDialogState();
 }
 
-class _ExtractionDialogState extends State<_ExtractionDialog> {
+class ExtractionDialogState extends State<ExtractionDialog> {
   ExtractionProgress? value;
   Object? error;
   StreamSubscription? sub;
@@ -297,16 +310,32 @@ class _ExtractionDialogState extends State<_ExtractionDialog> {
   Widget build(BuildContext context) => AlertDialog(
     title: const Text('Extraction'),
     content: error != null
-        ? const Text(
-            'Impossible d’extraire cette archive. Vérifiez le fichier et l’espace disponible.',
+        ? Text(
+            'Impossible d’extraire cette archive. Vérifiez le fichier et '
+            'l’espace disponible.\n\n$error',
           )
         : Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              LinearProgressIndicator(value: value?.fraction),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: value?.fraction,
+                  minHeight: 8,
+                ),
+              ),
               const SizedBox(height: 12),
-              Text(value?.current ?? 'Préparation…'),
-              if (value != null) Text('${value!.completed} / ${value!.total}'),
+              Text(
+                value?.current ?? 'Préparation…',
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+              if (value != null)
+                Text(
+                  '${value!.completed} / ${value!.total} fichiers',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
             ],
           ),
     actions: [
@@ -315,7 +344,7 @@ class _ExtractionDialogState extends State<_ExtractionDialog> {
           widget.cancel();
           Navigator.pop(context);
         },
-        child: const Text('Annuler'),
+        child: Text(error != null ? 'Fermer' : 'Annuler'),
       ),
     ],
   );

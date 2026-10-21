@@ -73,15 +73,19 @@ class ArchiveExtractionService {
           if (!entry.isDirectory) {
             final source = await session.openEntry(entry),
                 stream = await source.openRead(),
-                bytes = <int>[];
+                // A growable List<int> boxes every byte; BytesBuilder keeps
+                // chunks as-is and joins them once.
+                bytes = BytesBuilder(
+                  copy: false,
+                );
             await for (final chunk in stream) {
               token.throwIfCancelled();
-              bytes.addAll(chunk);
+              bytes.add(chunk);
             }
             final file = await storage.createFile(
               parent,
               parts.last,
-              Uint8List.fromList(bytes),
+              bytes.takeBytes(),
             );
             created.add(file.uri);
           }

@@ -37,6 +37,30 @@ class FormatDetector {
         evidence: const ['magic:7z'],
       );
     }
+    // Compressed streams: tarballs (.tar.gz, .tgz…) or single files (.gz).
+    for (final (magic, container, tag) in const [
+      ([0x1f, 0x8b], ContainerFormat.gzip, 'magic:gzip'),
+      ([0x42, 0x5a, 0x68], ContainerFormat.bzip2, 'magic:bzip2'),
+      ([0xfd, 0x37, 0x7a, 0x58, 0x5a, 0x00], ContainerFormat.xz, 'magic:xz'),
+    ]) {
+      if (_has(prefix, magic)) {
+        return DetectedFormat(
+          container: container,
+          content: ContentKind.archive,
+          confidence: .95,
+          evidence: [tag],
+        );
+      }
+    }
+    // A plain tar has its signature at offset 257, beyond a short prefix.
+    if (name.endsWith('.tar')) {
+      return const DetectedFormat(
+        container: ContainerFormat.tar,
+        content: ContentKind.archive,
+        confidence: .8,
+        evidence: ['extension:tar'],
+      );
+    }
     if (_has(prefix, [0x50, 0x4b, 0x03, 0x04]) ||
         _has(prefix, [0x50, 0x4b, 0x05, 0x06])) {
       final entries =
@@ -140,7 +164,10 @@ class FormatDetector {
         evidence: ['mime/extension:markdown'],
       );
     }
-    if (mimeType?.startsWith('text/') == true || name.endsWith('.txt')) {
+    if (mimeType?.startsWith('text/') == true ||
+        mimeType == 'application/json' ||
+        mimeType == 'application/xml' ||
+        _plainText.hasMatch(name)) {
       return const DetectedFormat(
         container: ContainerFormat.none,
         content: ContentKind.text,
@@ -163,3 +190,9 @@ class FormatDetector {
     return true;
   }
 }
+
+/// Plain-text formats opened (and editable) in the text reader.
+final _plainText = RegExp(
+  r'\.(txt|log|json|xml|ya?ml|ini|conf|cfg|properties|toml|env|csv|tsv|srt|'
+  r'vtt|sh|bat|py|js|ts|dart|kt|java|c|cc|cpp|h|css|sql|gradle|gitignore)$',
+);

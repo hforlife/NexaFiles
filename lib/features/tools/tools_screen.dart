@@ -5,25 +5,65 @@ import '../settings/storage_data_screen.dart';
 import '../../shared/formatters.dart';
 import '../files/files_controller.dart';
 import '../../app/theme/design_tokens.dart';
+import '../../shared/widgets/nexa_ui.dart';
 import '../files/category_screen.dart';
+import '../cleaner/cleaner_screen.dart';
+import '../operations/operations_ui.dart';
+import '../search/search_screen.dart';
+import '../transfer/wifi_transfer_screen.dart';
 import 'trash_screen.dart';
 
 class ToolsScreen extends ConsumerWidget {
   const ToolsScreen({super.key});
   @override
   Widget build(BuildContext context, WidgetRef ref) => ListView(
-    padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+    padding: EdgeInsets.fromLTRB(16, 8, 16, dockInset(context)),
     children: [
-      Text('Actions rapides', style: Theme.of(context).textTheme.titleLarge),
-      const SizedBox(height: 12),
       GridView.count(
         shrinkWrap: true,
         physics: const NeverScrollableScrollPhysics(),
         crossAxisCount: MediaQuery.sizeOf(context).width > 600 ? 4 : 2,
-        childAspectRatio: 1.15,
+        childAspectRatio: 1.05,
         crossAxisSpacing: 12,
         mainAxisSpacing: 12,
         children: [
+          _Tool(
+            icon: Icons.cleaning_services_rounded,
+            title: 'Nettoyage',
+            subtitle: 'Doublons, gros fichiers, APK',
+            color: AppColors.image,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CleanerScreen()),
+            ),
+          ),
+          _Tool(
+            icon: Icons.wifi_tethering_rounded,
+            title: 'Transfert Wi-Fi',
+            subtitle: 'Échanger avec un ordinateur',
+            color: AppColors.reading,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const WifiTransferScreen()),
+            ),
+          ),
+          _Tool(
+            icon: Icons.manage_search_rounded,
+            title: 'Recherche',
+            subtitle: 'Dans tout le stockage',
+            color: AppColors.document,
+            onTap: () => Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const SearchScreen()),
+            ),
+          ),
+          _Tool(
+            icon: Icons.sync_alt_rounded,
+            title: 'Opérations',
+            subtitle: 'Copies et extractions en cours',
+            color: AppColors.archive,
+            onTap: () => showOperationsSheet(context),
+          ),
           _Tool(
             icon: Icons.delete_outline,
             title: 'Corbeille',
@@ -49,7 +89,7 @@ class ToolsScreen extends ConsumerWidget {
             ),
           ),
           _Tool(
-            icon: Icons.cleaning_services_outlined,
+            icon: Icons.data_usage_rounded,
             title: 'Stockage et données',
             subtitle: 'Cache et progression',
             color: AppColors.image,
@@ -75,9 +115,21 @@ class ToolsScreen extends ConsumerWidget {
         ],
       ),
       const SizedBox(height: 28),
-      Text(
-        'NexaFiles travaille hors ligne et n’affiche ici que les outils disponibles.',
-        style: Theme.of(context).textTheme.bodyMedium,
+      Row(
+        children: [
+          Icon(
+            Icons.cloud_off_rounded,
+            size: 18,
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'NexaFiles travaille hors ligne : tout reste sur votre appareil.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+          ),
+        ],
       ),
     ],
   );
@@ -160,19 +212,25 @@ class _Tool extends StatelessWidget {
   @override
   Widget build(BuildContext context) => Card(
     child: InkWell(
-      borderRadius: BorderRadius.circular(18),
       onTap: onTap,
       child: Padding(
         padding: const EdgeInsets.all(16),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            CircleAvatar(
-              backgroundColor: color.withValues(alpha: .14),
-              child: Icon(icon, color: color),
+            Row(
+              children: [
+                IconBubble(icon: icon, color: color, size: 46),
+                const Spacer(),
+                Icon(
+                  Icons.arrow_outward_rounded,
+                  size: 20,
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
+              ],
             ),
             const Spacer(),
-            Text(title, style: const TextStyle(fontWeight: FontWeight.w700)),
+            Text(title, style: Theme.of(context).textTheme.titleSmall),
             Text(
               subtitle,
               maxLines: 2,
